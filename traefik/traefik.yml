@@ -1,0 +1,135 @@
+# Traefik Configuration for Zplus SaaS Base
+# This file configures dynamic routing, SSL termination, and rate limiting
+
+# Global configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# Entrypoints
+entryPoints:
+  # HTTP entrypoint (redirects to HTTPS)
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  # HTTPS entrypoint
+  websecure:
+    address: ":443"
+    http:
+      middlewares:
+        - default-headers@file
+        - secure-headers@file
+
+  # Traefik dashboard
+  traefik:
+    address: ":8080"
+
+# API and Dashboard
+api:
+  dashboard: true
+  debug: true
+  insecure: false
+
+# Providers
+providers:
+  # File provider for static configuration
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+  # Docker provider for service discovery
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: zplus-network
+    watch: true
+
+  # Consul provider for dynamic configuration
+  consul:
+    endpoints:
+      - "consul:8500"
+    rootKey: "traefik"
+    watch: true
+
+# Certificate resolvers for SSL/TLS
+certificatesResolvers:
+  # Let's Encrypt resolver for automatic SSL certificates
+  letsencrypt:
+    acme:
+      email: admin@zplus.io
+      storage: /etc/traefik/acme/acme.json
+      httpChallenge:
+        entryPoint: web
+      # DNS challenge for wildcard certificates
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+        delayBeforeCheck: 60
+
+  # Self-signed certificates for development
+  selfsigned:
+    acme:
+      email: dev@zplus.io
+      storage: /etc/traefik/acme/acme-dev.json
+      caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      httpChallenge:
+        entryPoint: web
+
+# Metrics
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    buckets:
+      - 0.1
+      - 0.3
+      - 1.2
+      - 5.0
+
+# Access logs
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  format: json
+  fields:
+    defaultMode: keep
+    names:
+      ClientUsername: drop
+      ClientHost: keep
+      ClientPort: drop
+      ClientAddr: keep
+    headers:
+      defaultMode: keep
+      names:
+        User-Agent: keep
+        Authorization: drop
+        Content-Type: keep
+
+# Global logs
+log:
+  level: INFO
+  filePath: "/var/log/traefik/traefik.log"
+  format: json
+
+# Pilot (optional, for Traefik Cloud integration)
+# pilot:
+#   token: "your-pilot-token"
+
+# Experimental features
+experimental:
+  plugins:
+    # Rate limiting plugin
+    traefik-real-ip:
+      moduleName: github.com/soulbalz/traefik-real-ip
+      version: v1.0.3
+    # Tenant isolation plugin
+    tenant-router:
+      moduleName: github.com/zplus/traefik-tenant-router
+      version: v1.0.0

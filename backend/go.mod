@@ -1,6 +1,8 @@
 module github.com/ilmsadmin/zplus-saas-base
 
-go 1.21
+go 1.22
+
+toolchain go1.24.5
 
 require (
 	github.com/casbin/casbin/v2 v2.116.0
@@ -13,6 +15,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.4.0
 	github.com/spf13/cobra v1.9.1
+	github.com/vektah/gqlparser/v2 v2.5.30
 	go.mongodb.org/mongo-driver v1.13.1
 	go.uber.org/zap v1.26.0
 	gorm.io/driver/postgres v1.5.9
@@ -20,6 +23,7 @@ require (
 )
 
 require (
+	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
 	github.com/casbin/govaluate v1.3.0 // indirect
@@ -57,7 +61,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect

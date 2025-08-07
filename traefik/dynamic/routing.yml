@@ -1,0 +1,349 @@
+# Dynamic Traefik configuration for Zplus SaaS Base
+# This file contains dynamic routing rules, middlewares, and services
+
+http:
+  # Middlewares
+  middlewares:
+    # Default security headers
+    default-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+
+    # Additional security headers
+    secure-headers:
+      headers:
+        customHeaders:
+          X-Forwarded-Proto: "https"
+          X-Forwarded-For: ""
+          X-Real-IP: ""
+          X-Tenant-Domain: ""
+
+    # Rate limiting for system admin
+    admin-rate-limit:
+      rateLimit:
+        burst: 100
+        average: 50
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 2
+
+    # Rate limiting for tenant admin (more restrictive)
+    tenant-admin-rate-limit:
+      rateLimit:
+        burst: 50
+        average: 25
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 2
+
+    # Rate limiting for regular users
+    user-rate-limit:
+      rateLimit:
+        burst: 30
+        average: 15
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 2
+
+    # Rate limiting for public endpoints (login, health check)
+    public-rate-limit:
+      rateLimit:
+        burst: 20
+        average: 10
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 2
+
+    # CORS middleware
+    cors-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+          - X-Tenant-Domain
+          - X-Client-ID
+        accessControlAllowOriginList:
+          - "https://admin.zplus.io"
+          - "https://*.zplus.io"
+          - "http://localhost:3000"
+          - "http://localhost:3001"
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+
+    # Tenant domain extractor
+    tenant-domain-header:
+      headers:
+        customRequestHeaders:
+          X-Tenant-Domain: "{{ .Request.Host }}"
+
+    # Compression
+    compression:
+      compression: {}
+
+    # IP whitelist for admin access (optional)
+    admin-ip-whitelist:
+      ipWhiteList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+
+    # Circuit breaker
+    circuit-breaker:
+      circuitBreaker:
+        expression: "NetworkErrorRatio() > 0.3 || ResponseCodeRatio(500, 600, 0, 600) > 0.3"
+        checkPeriod: 10s
+        fallbackDuration: 30s
+        recoveryDuration: 10s
+
+    # Retry middleware
+    retry-policy:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+
+  # Services
+  services:
+    # Backend API service
+    zplus-backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8082"
+        healthCheck:
+          path: "/health"
+          interval: 30s
+          timeout: 5s
+          scheme: http
+
+    # Frontend services
+    zplus-admin-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://admin-frontend:3000"
+        healthCheck:
+          path: "/api/health"
+          interval: 30s
+          timeout: 5s
+
+    zplus-tenant-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://tenant-frontend:3001"
+        healthCheck:
+          path: "/api/health"
+          interval: 30s
+          timeout: 5s
+
+    # Keycloak service
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: "http://keycloak:8080"
+        healthCheck:
+          path: "/health/ready"
+          interval: 30s
+          timeout: 10s
+
+  # Routers
+  routers:
+    # System Admin Routes (admin.zplus.io)
+    admin-web:
+      rule: "Host(`admin.zplus.io`) || Host(`admin.localhost`)"
+      service: zplus-admin-frontend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - admin-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "admin.zplus.io"
+
+    # System Admin API Routes
+    admin-api:
+      rule: "Host(`admin.zplus.io`) && (PathPrefix(`/api/`) || PathPrefix(`/auth/`))"
+      service: zplus-backend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - admin-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+
+    # Tenant Frontend Routes (*.zplus.io)
+    tenant-web:
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.zplus.io`) || HostRegexp(`{subdomain:[a-z0-9-]+}.localhost`)"
+      service: zplus-tenant-frontend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - tenant-domain-header
+        - user-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "*.zplus.io"
+
+    # Tenant API Routes
+    tenant-api:
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.zplus.io`) && (PathPrefix(`/api/`) || PathPrefix(`/auth/`))"
+      service: zplus-backend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - tenant-domain-header
+        - user-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+
+    # Tenant Admin Routes (*.zplus.io/admin)
+    tenant-admin-web:
+      rule: "HostRegexp(`{subdomain:[a-z0-9-]+}.zplus.io`) && PathPrefix(`/admin`)"
+      service: zplus-tenant-frontend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - tenant-domain-header
+        - tenant-admin-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+
+    # Custom Domain Routes (for tenants with custom domains)
+    custom-domain-web:
+      rule: "!HostRegexp(`{subdomain:[a-z0-9-]+}.zplus.io`) && !Host(`admin.zplus.io`) && !Host(`localhost`) && !HostRegexp(`{any:.*}.localhost`)"
+      service: zplus-tenant-frontend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - tenant-domain-header
+        - user-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+
+    # Custom Domain API Routes
+    custom-domain-api:
+      rule: "!HostRegexp(`{subdomain:[a-z0-9-]+}.zplus.io`) && !Host(`admin.zplus.io`) && (PathPrefix(`/api/`) || PathPrefix(`/auth/`))"
+      service: zplus-backend
+      middlewares:
+        - default-headers
+        - secure-headers
+        - cors-headers
+        - tenant-domain-header
+        - user-rate-limit
+        - compression
+        - circuit-breaker
+        - retry-policy
+      tls:
+        certResolver: letsencrypt
+
+    # Keycloak Routes
+    keycloak-web:
+      rule: "Host(`auth.zplus.io`) || Host(`auth.localhost`)"
+      service: keycloak
+      middlewares:
+        - default-headers
+        - cors-headers
+        - public-rate-limit
+        - compression
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: "auth.zplus.io"
+
+    # Traefik Dashboard (secured)
+    traefik-dashboard:
+      rule: "Host(`traefik.zplus.io`) || Host(`traefik.localhost`)"
+      service: api@internal
+      middlewares:
+        - default-headers
+        - admin-ip-whitelist
+        - admin-rate-limit
+      tls:
+        certResolver: letsencrypt
+
+# TCP routers (for non-HTTP services)
+tcp:
+  routers:
+    # Database connections (if needed)
+    postgres-tcp:
+      rule: "HostSNI(`db.zplus.io`)"
+      service: postgres-tcp
+      tls:
+        passthrough: true
+
+    mongodb-tcp:
+      rule: "HostSNI(`mongo.zplus.io`)"
+      service: mongodb-tcp
+      tls:
+        passthrough: true
+
+  services:
+    postgres-tcp:
+      loadBalancer:
+        servers:
+          - address: "postgres:5432"
+
+    mongodb-tcp:
+      loadBalancer:
+        servers:
+          - address: "mongodb:27017"
+
+# TLS configuration
+tls:
+  options:
+    # Default TLS options
+    default:
+      minVersion: "VersionTLS12"
+      cipherSuites:
+        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+        - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+
+    # Modern TLS options
+    modern:
+      minVersion: "VersionTLS13"

@@ -69,6 +69,14 @@ test-integration: ## Run integration tests
 	@echo "Running integration tests..."
 	go test -v -race -tags=integration ./...
 
+test-auth: ## Test authentication system
+	@echo "Testing authentication system..."
+	./scripts/test-login-interfaces.sh
+
+test-login: ## Test login interfaces
+	@echo "Testing login interfaces..."
+	./scripts/test-login-interfaces.sh
+
 # Code quality
 fmt: ## Format Go code
 	@echo "Formatting code..."

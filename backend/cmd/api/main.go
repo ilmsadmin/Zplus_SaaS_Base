@@ -11,19 +11,26 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/ilmsadmin/zplus-saas-base/internal/application"
+	"github.com/ilmsadmin/zplus-saas-base/internal/infrastructure/auth"
 	"github.com/ilmsadmin/zplus-saas-base/internal/infrastructure/database"
 	"github.com/ilmsadmin/zplus-saas-base/internal/infrastructure/middleware"
+	"github.com/ilmsadmin/zplus-saas-base/internal/interfaces"
 	"github.com/ilmsadmin/zplus-saas-base/pkg/config"
 	"github.com/ilmsadmin/zplus-saas-base/pkg/logger"
 )
 
 type Application struct {
-	Config   *config.Config
-	Logger   *logger.Logger
-	Postgres *database.PostgresDB
-	Redis    *database.RedisClient
-	Mongo    *database.MongoClient
-	Fiber    *fiber.App
+	Config            *config.Config
+	Logger            *logger.Logger
+	Postgres          *database.PostgresDB
+	Redis             *database.RedisClient
+	Mongo             *database.MongoClient
+	Fiber             *fiber.App
+	KeycloakValidator *auth.KeycloakValidator
+	KeycloakClient    *auth.KeycloakClient
+	AuthService       *application.AuthService
+	AuthHandler       *interfaces.AuthHandler
 }
 
 func main() {
@@ -52,6 +59,11 @@ func main() {
 	// Setup databases
 	if err := app.setupDatabases(); err != nil {
 		log.Fatalf("Failed to setup databases: %v", err)
+	}
+
+	// Setup authentication
+	if err := app.setupAuth(); err != nil {
+		log.Fatalf("Failed to setup authentication: %v", err)
 	}
 
 	// Setup Fiber app
@@ -110,6 +122,43 @@ func (app *Application) setupDatabases() error {
 	return nil
 }
 
+func (app *Application) setupAuth() error {
+	// Load auth config
+	authConfig := config.LoadAuthConfig()
+
+	// Initialize Keycloak validator
+	app.KeycloakValidator = auth.NewKeycloakValidator(auth.KeycloakConfig{
+		URL:      authConfig.Keycloak.URL,
+		Realm:    authConfig.Keycloak.Realm,
+		ClientID: authConfig.Keycloak.BackendClientID,
+		Secret:   authConfig.Keycloak.BackendSecret,
+	})
+
+	// Initialize Keycloak client
+	app.KeycloakClient = auth.NewKeycloakClient(auth.KeycloakConfig{
+		URL:      authConfig.Keycloak.URL,
+		Realm:    authConfig.Keycloak.Realm,
+		ClientID: authConfig.Keycloak.BackendClientID,
+		Secret:   authConfig.Keycloak.BackendSecret,
+	})
+
+	// Initialize auth service
+	app.AuthService = application.NewAuthService(
+		app.KeycloakClient,
+		app.KeycloakValidator,
+		app.Logger.Desugar(), // Get raw zap.Logger
+	)
+
+	// Initialize auth handler
+	app.AuthHandler = interfaces.NewAuthHandler(
+		app.AuthService,
+		app.Logger.Desugar(), // Get raw zap.Logger
+	)
+
+	log.Println("Authentication system initialized")
+	return nil
+}
+
 func (app *Application) setupFiber() {
 	// Create Fiber app
 	app.Fiber = fiber.New(fiber.Config{
@@ -124,6 +173,21 @@ func (app *Application) setupFiber() {
 }
 
 func (app *Application) setupRoutes() {
+	// Create auth middleware
+	authMiddleware := middleware.AuthMiddleware(app.KeycloakValidator, app.Logger.Desugar())
+
+	// Setup authentication routes
+	interfaces.SetupAuthRoutes(app.Fiber, app.AuthHandler, authMiddleware, app.Logger.Desugar())
+
+	// Setup login interface routes (JSON API)
+	interfaces.SetupLoginInterfaceRoutes(app.Fiber, app.Logger.Desugar())
+
+	// Setup HTML login pages (optional)
+	interfaces.SetupLoginHTMLRoutes(app.Fiber, app.Logger.Desugar())
+
+	// Setup role-based redirect routes
+	interfaces.SetupLoginRedirectRoutes(app.Fiber, authMiddleware, app.Logger.Desugar())
+
 	// Health check
 	app.Fiber.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -147,6 +211,8 @@ func (app *Application) setupRoutes() {
 
 	// System admin routes
 	adminRoutes := v1.Group("/admin")
+	adminRoutes.Use(authMiddleware)
+	adminRoutes.Use(middleware.RequireSystemAdmin())
 	adminRoutes.Get("/tenants", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"message": "Tenant listing endpoint",

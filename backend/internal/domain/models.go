@@ -20,16 +20,94 @@ type Tenant struct {
 
 // TenantDomain represents custom domains for tenants
 type TenantDomain struct {
-	ID         uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	TenantID   uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null"`
-	Domain     string    `json:"domain" gorm:"unique;not null"`
-	IsVerified bool      `json:"is_verified" gorm:"default:false"`
-	IsPrimary  bool      `json:"is_primary" gorm:"default:false"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID                 uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID           uuid.UUID              `json:"tenant_id" gorm:"type:uuid;not null"`
+	Domain             string                 `json:"domain" gorm:"unique;not null"`
+	IsCustom           bool                   `json:"is_custom" gorm:"default:false"`
+	Verified           bool                   `json:"verified" gorm:"default:false"`
+	IsVerified         bool                   `json:"is_verified" gorm:"default:false"` // Alias for compatibility
+	IsPrimary          bool                   `json:"is_primary" gorm:"default:false"`
+	SSLEnabled         bool                   `json:"ssl_enabled" gorm:"default:false"`
+	VerificationToken  string                 `json:"verification_token"`
+	VerificationMethod string                 `json:"verification_method" gorm:"default:'dns'"`
+	VerifiedAt         *time.Time             `json:"verified_at"`
+	SSLCertIssuedAt    *time.Time             `json:"ssl_cert_issued_at"`
+	SSLCertExpiresAt   *time.Time             `json:"ssl_cert_expires_at"`
+	DNSProvider        string                 `json:"dns_provider" gorm:"default:'auto'"`
+	DNSZoneID          string                 `json:"dns_zone_id"`
+	ValidationErrors   map[string]interface{} `json:"validation_errors" gorm:"type:jsonb;default:'[]'"`
+	SSLIssuer          string                 `json:"ssl_issuer" gorm:"default:'letsencrypt'"`
+	SSLCertSubject     string                 `json:"ssl_cert_subject"`
+	SSLCertSAN         []string               `json:"ssl_cert_san" gorm:"type:text[]"`
+	SSLAutoRenew       bool                   `json:"ssl_auto_renew" gorm:"default:true"`
+	RoutingPriority    int                    `json:"routing_priority" gorm:"default:100"`
+	RateLimitConfig    map[string]interface{} `json:"rate_limit_config" gorm:"type:jsonb"`
+	SecurityConfig     map[string]interface{} `json:"security_config" gorm:"type:jsonb"`
+	HealthCheckConfig  map[string]interface{} `json:"health_check_config" gorm:"type:jsonb"`
+	MetricsEnabled     bool                   `json:"metrics_enabled" gorm:"default:true"`
+	LastHealthCheck    *time.Time             `json:"last_health_check"`
+	LastSSLCheck       *time.Time             `json:"last_ssl_check"`
+	Status             string                 `json:"status" gorm:"default:'active'"`
+	Notes              string                 `json:"notes"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+
+	// Relationships - Note: Using string TenantID instead of UUID for flexibility
+	ValidationLogs  []DomainValidationLog `json:"validation_logs" gorm:"foreignKey:DomainID"`
+	SSLCertificates []SSLCertificate      `json:"ssl_certificates" gorm:"foreignKey:DomainID"`
+}
+
+// DomainValidationLog tracks domain validation attempts
+type DomainValidationLog struct {
+	ID             uint                   `json:"id" gorm:"primaryKey"`
+	DomainID       uuid.UUID              `json:"domain_id" gorm:"type:uuid;not null"`
+	ValidationType string                 `json:"validation_type" gorm:"not null"`
+	Status         string                 `json:"status" gorm:"not null"`
+	ValidationData map[string]interface{} `json:"validation_data" gorm:"type:jsonb;default:'{}'"`
+	ErrorMessage   string                 `json:"error_message"`
+	Attempts       int                    `json:"attempts" gorm:"default:1"`
+	NextRetryAt    *time.Time             `json:"next_retry_at"`
+	CreatedAt      time.Time              `json:"created_at"`
+	CompletedAt    *time.Time             `json:"completed_at"`
 
 	// Relationships
-	Tenant Tenant `json:"tenant" gorm:"foreignKey:TenantID"`
+	Domain TenantDomain `json:"domain" gorm:"foreignKey:DomainID"`
+}
+
+// SSLCertificate tracks SSL certificates for domains
+type SSLCertificate struct {
+	ID                 uint       `json:"id" gorm:"primaryKey"`
+	DomainID           uuid.UUID  `json:"domain_id" gorm:"type:uuid;not null"`
+	Issuer             string     `json:"issuer" gorm:"not null;default:'letsencrypt'"`
+	CertificatePEM     string     `json:"certificate_pem" gorm:"type:text"`
+	PrivateKeyPEM      string     `json:"private_key_pem" gorm:"type:text"` // Should be encrypted
+	ChainPEM           string     `json:"chain_pem" gorm:"type:text"`
+	SerialNumber       string     `json:"serial_number"`
+	Fingerprint        string     `json:"fingerprint"`
+	Subject            string     `json:"subject"`
+	SAN                []string   `json:"san" gorm:"type:text[]"`
+	IssuedAt           time.Time  `json:"issued_at" gorm:"not null"`
+	ExpiresAt          time.Time  `json:"expires_at" gorm:"not null"`
+	AutoRenew          bool       `json:"auto_renew" gorm:"default:true"`
+	RenewalAttempts    int        `json:"renewal_attempts" gorm:"default:0"`
+	LastRenewalAttempt *time.Time `json:"last_renewal_attempt"`
+	Status             string     `json:"status" gorm:"default:'active'"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+
+	// Relationships
+	Domain TenantDomain `json:"domain" gorm:"foreignKey:DomainID"`
+}
+
+// DomainRoutingCache caches domain routing information for performance
+type DomainRoutingCache struct {
+	Domain         string                 `json:"domain" gorm:"primaryKey"`
+	TenantID       string                 `json:"tenant_id" gorm:"not null"`
+	BackendService string                 `json:"backend_service" gorm:"not null;default:'ilms-api'"`
+	RoutingConfig  map[string]interface{} `json:"routing_config" gorm:"type:jsonb;default:'{}'"`
+	CacheExpiresAt time.Time              `json:"cache_expires_at" gorm:"not null"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 // User represents a user in the system
@@ -233,4 +311,168 @@ const (
 	PermUserUpdateProfile = "user:update_profile"
 	PermUserManageFiles   = "user:manage_files"
 	PermUserViewFiles     = "user:view_files"
+)
+
+// ===========================
+// GraphQL Federation Models
+// ===========================
+
+// GraphQLSchema represents a GraphQL schema for federation
+type GraphQLSchema struct {
+	ID               uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ServiceName      string                 `json:"service_name" gorm:"not null"`
+	ServiceVersion   string                 `json:"service_version" gorm:"not null"`
+	SchemaSDL        string                 `json:"schema_sdl" gorm:"type:text;not null"`
+	SchemaHash       string                 `json:"schema_hash" gorm:"not null"`
+	Status           string                 `json:"status" gorm:"default:'active'"`
+	IsActive         bool                   `json:"is_active" gorm:"default:true"`
+	IsValid          bool                   `json:"is_valid" gorm:"default:true"`
+	ValidationErrors []string               `json:"validation_errors" gorm:"type:jsonb;default:'[]'"`
+	Metadata         map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
+}
+
+// FederationService represents a service in the federation
+type FederationService struct {
+	ID              uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ServiceName     string                 `json:"service_name" gorm:"unique;not null"`
+	ServiceURL      string                 `json:"service_url" gorm:"not null"`
+	HealthCheckURL  string                 `json:"health_check_url"`
+	SchemaID        *uuid.UUID             `json:"schema_id" gorm:"type:uuid"`
+	Status          string                 `json:"status" gorm:"default:'healthy'"`
+	LastHealthCheck *time.Time             `json:"last_health_check"`
+	Metadata        map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	Tags            []string               `json:"tags" gorm:"type:text[]"`
+	Weight          int                    `json:"weight" gorm:"default:100"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+
+	// Relationships
+	Schema *GraphQLSchema `json:"schema,omitempty" gorm:"foreignKey:SchemaID"`
+}
+
+// FederationComposition represents a composed federated schema
+type FederationComposition struct {
+	ID                 uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	CompositionName    string                 `json:"composition_name" gorm:"not null"`
+	CompositionVersion string                 `json:"composition_version" gorm:"not null"`
+	Version            string                 `json:"version" gorm:"not null"`
+	ComposedSchema     string                 `json:"composed_schema" gorm:"type:text;not null"`
+	Services           []string               `json:"services" gorm:"type:jsonb;not null"`
+	ServiceSchemas     []ServiceSchemaRef     `json:"service_schemas" gorm:"type:jsonb;not null"`
+	Status             string                 `json:"status" gorm:"default:'active'"`
+	ValidationErrors   []string               `json:"validation_errors" gorm:"type:jsonb;default:'[]'"`
+	Warnings           []string               `json:"warnings" gorm:"type:jsonb;default:'[]'"`
+	Configuration      map[string]interface{} `json:"configuration" gorm:"type:jsonb;default:'{}'"`
+	ValidationResult   map[string]interface{} `json:"validation_result" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt          time.Time              `json:"created_at"`
+	DeployedAt         *time.Time             `json:"deployed_at"`
+}
+
+// ServiceSchemaRef represents a reference to a service schema in a composition
+type ServiceSchemaRef struct {
+	ServiceName string    `json:"service_name"`
+	SchemaID    uuid.UUID `json:"schema_id"`
+	Version     string    `json:"version"`
+}
+
+// GraphQLQueryMetrics represents query performance metrics
+type GraphQLQueryMetrics struct {
+	ID              uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID        *uuid.UUID             `json:"tenant_id" gorm:"type:uuid"`
+	QueryHash       string                 `json:"query_hash" gorm:"not null"`
+	QueryName       string                 `json:"query_name"`
+	OperationType   string                 `json:"operation_type" gorm:"not null"`
+	ExecutionTime   time.Duration          `json:"execution_time" gorm:"not null"`
+	ExecutionTimeMs int                    `json:"execution_time_ms" gorm:"not null"`
+	QueryComplexity int                    `json:"query_complexity"`
+	ComplexityScore int                    `json:"complexity_score"`
+	DepthScore      int                    `json:"depth_score"`
+	FieldCount      int                    `json:"field_count"`
+	ServicesCalled  []string               `json:"services_called" gorm:"type:jsonb;default:'[]'"`
+	ServiceCalls    []ServiceCallDetail    `json:"service_calls" gorm:"type:jsonb;default:'[]'"`
+	ErrorCount      int                    `json:"error_count" gorm:"default:0"`
+	CacheHit        bool                   `json:"cache_hit" gorm:"default:false"`
+	Metadata        map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt       time.Time              `json:"created_at"`
+
+	// Relationships
+	Tenant *Tenant `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
+}
+
+// ServiceCallDetail represents details of a service call during query execution
+type ServiceCallDetail struct {
+	ServiceName     string `json:"service_name"`
+	ExecutionTimeMs int    `json:"execution_time_ms"`
+	FieldCount      int    `json:"field_count"`
+	ErrorCount      int    `json:"error_count"`
+}
+
+// SchemaChangeEvent represents schema change events for auditing
+type SchemaChangeEvent struct {
+	ID              uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ServiceName     string                 `json:"service_name" gorm:"not null"`
+	ChangeType      string                 `json:"change_type" gorm:"not null"`
+	OldSchemaID     *uuid.UUID             `json:"old_schema_id" gorm:"type:uuid"`
+	NewSchemaID     *uuid.UUID             `json:"new_schema_id" gorm:"type:uuid"`
+	ChangeDetails   map[string]interface{} `json:"change_details" gorm:"type:jsonb;default:'{}'"`
+	BreakingChanges []string               `json:"breaking_changes" gorm:"type:jsonb;default:'[]'"`
+	ImpactAnalysis  map[string]interface{} `json:"impact_analysis" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt       time.Time              `json:"created_at"`
+	ProcessedAt     *time.Time             `json:"processed_at"`
+
+	// Relationships
+	OldSchema *GraphQLSchema `json:"old_schema,omitempty" gorm:"foreignKey:OldSchemaID"`
+	NewSchema *GraphQLSchema `json:"new_schema,omitempty" gorm:"foreignKey:NewSchemaID"`
+}
+
+// FederationGatewayConfig represents gateway configuration
+type FederationGatewayConfig struct {
+	ID            uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ConfigKey     string                 `json:"config_key" gorm:"unique;not null"`
+	ConfigName    string                 `json:"config_name" gorm:"unique;not null"`
+	ConfigValue   map[string]interface{} `json:"config_value" gorm:"type:jsonb;not null"`
+	GatewayConfig map[string]interface{} `json:"gateway_config" gorm:"type:jsonb;not null"`
+	IsActive      bool                   `json:"is_active" gorm:"default:false"`
+	CreatedAt     time.Time              `json:"created_at"`
+	ActivatedAt   *time.Time             `json:"activated_at"`
+}
+
+// Federation service status constants
+const (
+	ServiceStatusHealthy     = "healthy"
+	ServiceStatusUnhealthy   = "unhealthy"
+	ServiceStatusUnknown     = "unknown"
+	ServiceStatusMaintenance = "maintenance"
+)
+
+// Schema status constants
+const (
+	SchemaStatusActive   = "active"
+	SchemaStatusInactive = "inactive"
+	SchemaStatusInvalid  = "invalid"
+)
+
+// Composition status constants
+const (
+	CompositionStatusActive   = "active"
+	CompositionStatusInactive = "inactive"
+	CompositionStatusInvalid  = "invalid"
+	CompositionStatusFailed   = "failed"
+)
+
+// Schema change event types
+const (
+	ChangeTypeSchemaUpdated       = "schema_updated"
+	ChangeTypeServiceRegistered   = "service_registered"
+	ChangeTypeServiceDeregistered = "service_deregistered"
+	ChangeTypeComposition         = "composition"
+)
+
+// GraphQL operation types
+const (
+	OperationTypeQuery        = "query"
+	OperationTypeMutation     = "mutation"
+	OperationTypeSubscription = "subscription"
 )

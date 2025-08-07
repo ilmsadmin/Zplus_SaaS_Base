@@ -1,0 +1,215 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: zplus_traefik
+    restart: unless-stopped
+    command:
+      # Enable Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=zplus_network
+      
+      # Enable file provider for dynamic config
+      - --providers.file.filename=/dynamic/routing.yml
+      - --providers.file.watch=true
+      
+      # Define entrypoints
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      
+      # Enable ACME (Let's Encrypt)
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=admin@zplus.io
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory # Use staging for testing
+      
+      # Cloudflare DNS challenge (for wildcard certs)
+      - --certificatesresolvers.cloudflare.acme.dnschallenge=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.email=admin@zplus.io
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/cloudflare.json
+      - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory # Use staging for testing
+      
+      # Enable Dashboard
+      - --api.dashboard=true
+      - --api.insecure=true # Remove in production
+      
+      # Enable access logs
+      - --accesslog=true
+      - --log.level=INFO
+      
+      # Enable metrics
+      - --metrics.prometheus=true
+      - --metrics.prometheus.buckets=0.1,0.3,1.2,5.0
+      
+      # Global redirect to HTTPS
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+    
+    environment:
+      # Cloudflare credentials for DNS challenge
+      - CLOUDFLARE_EMAIL=${CLOUDFLARE_EMAIL:-}
+      - CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY:-}
+      - CLOUDFLARE_DNS_API_TOKEN=${CLOUDFLARE_DNS_API_TOKEN:-}
+    
+    ports:
+      - "80:80"     # HTTP
+      - "443:443"   # HTTPS
+      - "8080:8080" # Traefik Dashboard
+      - "9090:9090" # Metrics
+    
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic:/dynamic:ro
+      - traefik_letsencrypt:/letsencrypt
+      - traefik_logs:/var/log/traefik
+    
+    networks:
+      - zplus_network
+    
+    labels:
+      - "traefik.enable=true"
+      
+      # Dashboard
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.zplus.io`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=auth"
+      
+      # Basic auth for dashboard (admin:admin123)
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$2y$$10$$2b2cu/G9RPzULJW0nJMOweCJ0dPGPUGP2CfzVl0a4T7C7HrtzUn6e"
+      
+      # Metrics endpoint
+      - "traefik.http.routers.traefik-metrics.rule=Host(`metrics.zplus.io`)"
+      - "traefik.http.routers.traefik-metrics.entrypoints=websecure"
+      - "traefik.http.routers.traefik-metrics.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-metrics.service=prometheus@internal"
+      - "traefik.http.routers.traefik-metrics.middlewares=auth"
+    
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Backend API service
+  zplus-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zplus_backend
+    restart: unless-stopped
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=zplus_saas_base
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=zplus
+      - KEYCLOAK_CLIENT_ID=zplus-backend
+      - KEYCLOAK_CLIENT_SECRET=your-client-secret
+      - JWT_SECRET=your-jwt-secret-key
+      - ENVIRONMENT=development
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+    networks:
+      - zplus_network
+    labels:
+      - "traefik.enable=true"
+      
+      # Main API routes
+      - "traefik.http.routers.api.rule=Host(`api.zplus.io`) || PathPrefix(`/api/`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api.service=backend"
+      - "traefik.http.routers.api.middlewares=api-cors,api-ratelimit"
+      
+      # Backend service
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.backend.loadbalancer.healthcheck.interval=30s"
+      
+      # CORS middleware
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE,PATCH"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolallowheaders=*"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolalloworiginlist=*"
+      - "traefik.http.middlewares.api-cors.headers.accesscontrolmaxage=100"
+      - "traefik.http.middlewares.api-cors.headers.addvaryheader=true"
+      
+      # Rate limiting
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.burst=200"
+      - "traefik.http.middlewares.api-ratelimit.ratelimit.period=1m"
+
+  # Domain management service (separate service for domain operations)
+  domain-manager:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zplus_domain_manager
+    restart: unless-stopped
+    command: ["./domain-manager"] # Specialized binary for domain management
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=zplus_saas_base
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DNS_PROVIDER=cloudflare
+      - CLOUDFLARE_EMAIL=${CLOUDFLARE_EMAIL:-}
+      - CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY:-}
+      - ACME_EMAIL=admin@zplus.io
+      - VALIDATION_TIMEOUT=300
+      - CHECK_INTERVAL=300
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - zplus_network
+    volumes:
+      - traefik_letsencrypt:/certificates:ro # Read-only access to certificates
+    labels:
+      - "traefik.enable=false" # Internal service, not exposed
+
+  # Redis for caching and sessions
+  redis:
+    extends:
+      file: docker-compose.database.yml
+      service: redis
+
+  # PostgreSQL database
+  postgres:
+    extends:
+      file: docker-compose.database.yml
+      service: postgres
+
+  # MongoDB for documents
+  mongodb:
+    extends:
+      file: docker-compose.database.yml
+      service: mongodb
+
+volumes:
+  traefik_letsencrypt:
+    driver: local
+  traefik_logs:
+    driver: local
+
+networks:
+  zplus_network:
+    external: true

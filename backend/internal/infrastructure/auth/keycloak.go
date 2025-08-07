@@ -125,6 +125,11 @@ func (kv *KeycloakValidator) ValidateToken(tokenString string) (*TokenClaims, er
 	return claims, nil
 }
 
+// ValidateTokenString validates a JWT token string (alias for ValidateToken)
+func (kv *KeycloakValidator) ValidateTokenString(tokenString string) (*TokenClaims, error) {
+	return kv.ValidateToken(tokenString)
+}
+
 // syncJWKSet fetches the latest JWK set from Keycloak
 func (kv *KeycloakValidator) syncJWKSet() error {
 	// Sync every 5 minutes or if not synced yet
@@ -249,6 +254,14 @@ func NewKeycloakClient(config KeycloakConfig) *KeycloakClient {
 	}
 }
 
+// TokenResponse represents a token response from Keycloak
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
 // getAdminToken obtains an admin access token for API calls
 func (kc *KeycloakClient) getAdminToken() error {
 	if time.Now().Before(kc.tokenExpiry) && kc.accessToken != "" {
@@ -257,6 +270,112 @@ func (kc *KeycloakClient) getAdminToken() error {
 
 	// Implementation would go here to get admin token
 	// This is a placeholder for the actual implementation
+	return nil
+}
+
+// GetUserToken gets a user access token using username/password
+func (kc *KeycloakClient) GetUserToken(username, password, clientID string) (*TokenResponse, error) {
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", kc.config.URL, kc.config.Realm)
+
+	// Create form data
+	data := fmt.Sprintf("username=%s&password=%s&grant_type=password&client_id=%s", username, password, clientID)
+
+	// Add client secret if configured
+	if kc.config.Secret != "" {
+		data += fmt.Sprintf("&client_secret=%s", kc.config.Secret)
+	}
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := kc.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("authentication failed with status: %d", resp.StatusCode)
+	}
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// RefreshToken refreshes an access token using refresh token
+func (kc *KeycloakClient) RefreshToken(refreshToken, clientID string) (*TokenResponse, error) {
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", kc.config.URL, kc.config.Realm)
+
+	// Create form data
+	data := fmt.Sprintf("refresh_token=%s&grant_type=refresh_token&client_id=%s", refreshToken, clientID)
+
+	// Add client secret if configured
+	if kc.config.Secret != "" {
+		data += fmt.Sprintf("&client_secret=%s", kc.config.Secret)
+	}
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := kc.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("token refresh failed with status: %d", resp.StatusCode)
+	}
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// Logout logs out a user by invalidating the refresh token
+func (kc *KeycloakClient) Logout(refreshToken, clientID string) error {
+	logoutURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/logout", kc.config.URL, kc.config.Realm)
+
+	// Create form data
+	data := fmt.Sprintf("refresh_token=%s&client_id=%s", refreshToken, clientID)
+
+	// Add client secret if configured
+	if kc.config.Secret != "" {
+		data += fmt.Sprintf("&client_secret=%s", kc.config.Secret)
+	}
+
+	req, err := http.NewRequest("POST", logoutURL, strings.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := kc.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("logout failed with status: %d", resp.StatusCode)
+	}
+
 	return nil
 }
 
