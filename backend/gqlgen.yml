@@ -1,0 +1,71 @@
+# Where are all the schema files located? globs are supported eg  src/**/*.graphqls
+schema:
+  - graph/*.graphqls
+
+# Where should the generated resolver go?
+resolver:
+  layout: follow-schema
+  dir: graph
+  package: graph
+  filename_template: "{name}.resolvers.go"
+
+# Optional: turn on automatic generation
+autobind:
+  - "github.com/ilmsadmin/zplus-saas-base/internal/domain"
+
+# Where should any generated models go?
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Int32
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Int32
+
+# Where should the resolver implementations go?
+exec:
+  layout: follow-schema
+  dir: graph/generated
+  package: generated
+  filename: exec.go
+
+# Where should the model definitions go?
+model:
+  dir: graph/model
+  package: model
+  filename: models_gen.go
+
+# Where should the federation types go?
+federation:
+  filename: graph/generated/federation.go
+  package: generated
+
+# Uncomment to enable federation
+# federation:
+#   filename: graph/generated/federation.go
+#   package: generated
+#   version: 2
+
+# gqlgen will search for any type names in the schema in these go packages
+# if they match it will use them, otherwise it will generate them.
+# autobind:
+#  - "github.com/ilmsadmin/zplus-saas-base/graph/model"
+
+# This section declares type mapping between the GraphQL and go type systems
+#
+# The first line in each type will be used as defaults.
+#
+# The other lines can be used to override the type mappings on a per field
+# mapping basis
+# scalars:
+#  # Common custom scalar examples
+#  DateTime:
+#    model: time.Time
+#  # 
+#  UUID:
+#    model: github.com/google/uuid.UUID

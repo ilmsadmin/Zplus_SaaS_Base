@@ -1,0 +1,345 @@
+# GraphQL schema for Zplus SaaS Base
+
+scalar Time
+scalar UUID
+
+type Tenant {
+  id: UUID!
+  name: String!
+  subdomain: String!
+  status: String!
+  settings: TenantSettings
+  domains: [TenantDomain!]!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type TenantSettings {
+  theme: String
+  language: String
+  timezone: String
+  features: [String!]
+  branding: TenantBranding
+}
+
+type TenantBranding {
+  logo: String
+  faviconURL: String
+  primaryColor: String
+  secondaryColor: String
+}
+
+type TenantDomain {
+  id: UUID!
+  tenantId: UUID!
+  domain: String!
+  isVerified: Boolean!
+  isPrimary: Boolean!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type User {
+  id: UUID!
+  email: String!
+  username: String
+  firstName: String
+  lastName: String
+  avatar: String
+  status: String!
+  tenantUsers: [TenantUser!]!
+  userRoles: [UserRole!]!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type TenantUser {
+  id: UUID!
+  tenantId: UUID!
+  userId: UUID!
+  role: String!
+  status: String!
+  joinedAt: Time!
+  tenant: Tenant!
+  user: User!
+}
+
+# RBAC Types
+type Role {
+  id: UUID!
+  name: String!
+  description: String
+  isSystem: Boolean!
+  tenantId: UUID
+  permissions: [Permission!]!
+  createdAt: Time!
+  updatedAt: Time!
+  tenant: Tenant
+}
+
+type Permission {
+  id: UUID!
+  name: String!
+  resource: String!
+  action: String!
+  description: String
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type UserRole {
+  id: UUID!
+  userId: UUID!
+  roleId: UUID!
+  tenantId: UUID!
+  status: String!
+  createdAt: Time!
+  updatedAt: Time!
+  user: User!
+  role: Role!
+  tenant: Tenant!
+}
+
+type APIKey {
+  id: UUID!
+  tenantId: UUID!
+  name: String!
+  key: String!
+  permissions: [String!]!
+  expiresAt: Time
+  lastUsedAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type AuditLog {
+  id: UUID!
+  tenantId: UUID!
+  userId: UUID
+  action: String!
+  resource: String!
+  resourceId: String
+  ipAddress: String
+  userAgent: String
+  createdAt: Time!
+  tenant: Tenant!
+  user: User
+}
+
+# Input types
+input CreateTenantInput {
+  name: String!
+  subdomain: String!
+  settings: TenantSettingsInput
+}
+
+input UpdateTenantInput {
+  id: UUID!
+  name: String
+  status: String
+  settings: TenantSettingsInput
+}
+
+# RBAC Input types
+input CreateRoleInput {
+  name: String!
+  description: String
+  tenantId: UUID
+  permissions: [UUID!]
+}
+
+input UpdateRoleInput {
+  name: String
+  description: String
+  permissions: [UUID!]
+}
+
+input AssignRoleInput {
+  userId: UUID!
+  roleId: UUID!
+  tenantId: UUID!
+}
+
+input CreatePermissionInput {
+  name: String!
+  resource: String!
+  action: String!
+  description: String
+}
+
+input TenantSettingsInput {
+  theme: String
+  language: String
+  timezone: String
+  features: [String!]
+  branding: TenantBrandingInput
+}
+
+input TenantBrandingInput {
+  logo: String
+  faviconURL: String
+  primaryColor: String
+  secondaryColor: String
+}
+
+input CreateUserInput {
+  email: String!
+  username: String
+  firstName: String
+  lastName: String
+}
+
+input UpdateUserInput {
+  id: UUID!
+  username: String
+  firstName: String
+  lastName: String
+  avatar: String
+  status: String
+}
+
+input AddUserToTenantInput {
+  tenantId: UUID!
+  userId: UUID!
+  role: String!
+}
+
+input CreateDomainInput {
+  tenantId: UUID!
+  domain: String!
+}
+
+input CreateAPIKeyInput {
+  tenantId: UUID!
+  name: String!
+  permissions: [String!]!
+  expiresAt: Time
+}
+
+# Pagination
+input PaginationInput {
+  limit: Int = 20
+  offset: Int = 0
+}
+
+type TenantConnection {
+  nodes: [Tenant!]!
+  totalCount: Int!
+}
+
+type UserConnection {
+  nodes: [User!]!
+  totalCount: Int!
+}
+
+type AuditLogConnection {
+  nodes: [AuditLog!]!
+  totalCount: Int!
+}
+
+# RBAC Connections
+type RoleConnection {
+  nodes: [Role!]!
+  totalCount: Int!
+}
+
+type PermissionConnection {
+  nodes: [Permission!]!
+  totalCount: Int!
+}
+
+type UserRoleConnection {
+  nodes: [UserRole!]!
+  totalCount: Int!
+}
+
+# Queries
+type Query {
+  # Tenant queries
+  tenant(id: UUID!): Tenant
+  tenantBySubdomain(subdomain: String!): Tenant
+  tenants(pagination: PaginationInput): TenantConnection!
+  
+  # User queries
+  user(id: UUID!): User
+  userByEmail(email: String!): User
+  users(pagination: PaginationInput): UserConnection!
+  usersByTenant(tenantId: UUID!, pagination: PaginationInput): UserConnection!
+  
+  # Domain queries
+  tenantDomains(tenantId: UUID!): [TenantDomain!]!
+  
+  # API Key queries
+  apiKeys(tenantId: UUID!, pagination: PaginationInput): [APIKey!]!
+  
+  # Audit Log queries
+  auditLogs(tenantId: UUID!, pagination: PaginationInput): AuditLogConnection!
+  auditLogsByUser(userId: UUID!, pagination: PaginationInput): AuditLogConnection!
+  
+  # RBAC queries
+  role(id: UUID!): Role
+  roles(tenantId: UUID, pagination: PaginationInput): RoleConnection!
+  systemRoles: [Role!]!
+  tenantRoles(tenantId: UUID!): [Role!]!
+  
+  permission(id: UUID!): Permission
+  permissions(pagination: PaginationInput): PermissionConnection!
+  permissionsByResource(resource: String!): [Permission!]!
+  
+  userRole(id: UUID!): UserRole
+  userRoles(userId: UUID!): [UserRole!]!
+  userRolesByTenant(tenantId: UUID!, pagination: PaginationInput): UserRoleConnection!
+  userPermissions(userId: UUID!, tenantId: UUID!): [String!]!
+  
+  # Authorization checks
+  hasPermission(userId: UUID!, resource: String!, action: String!, tenantId: UUID!): Boolean!
+}
+
+# Mutations
+type Mutation {
+  # Tenant mutations
+  createTenant(input: CreateTenantInput!): Tenant!
+  updateTenant(input: UpdateTenantInput!): Tenant!
+  deleteTenant(id: UUID!): Boolean!
+  
+  # User mutations
+  createUser(input: CreateUserInput!): User!
+  updateUser(input: UpdateUserInput!): User!
+  deleteUser(id: UUID!): Boolean!
+  
+  # Tenant-User relationship mutations
+  addUserToTenant(input: AddUserToTenantInput!): TenantUser!
+  removeUserFromTenant(tenantId: UUID!, userId: UUID!): Boolean!
+  updateUserRole(tenantId: UUID!, userId: UUID!, role: String!): TenantUser!
+  
+  # Domain mutations
+  addCustomDomain(input: CreateDomainInput!): TenantDomain!
+  verifyDomain(id: UUID!): TenantDomain!
+  setPrimaryDomain(tenantId: UUID!, domainId: UUID!): TenantDomain!
+  deleteDomain(id: UUID!): Boolean!
+  
+  # API Key mutations
+  createAPIKey(input: CreateAPIKeyInput!): APIKey!
+  deleteAPIKey(id: UUID!): Boolean!
+  
+  # RBAC mutations
+  createRole(input: CreateRoleInput!): Role!
+  updateRole(id: UUID!, input: UpdateRoleInput!): Role!
+  deleteRole(id: UUID!): Boolean!
+  
+  createPermission(input: CreatePermissionInput!): Permission!
+  updatePermission(id: UUID!, input: CreatePermissionInput!): Permission!
+  deletePermission(id: UUID!): Boolean!
+  
+  assignRole(input: AssignRoleInput!): UserRole!
+  removeRole(userId: UUID!, roleId: UUID!, tenantId: UUID!): Boolean!
+  
+  # Tenant setup
+  initializeTenantRoles(tenantId: UUID!): Boolean!
+}
+
+# Subscriptions
+type Subscription {
+  tenantUpdated(tenantId: UUID!): Tenant!
+  auditLogCreated(tenantId: UUID!): AuditLog!
+}

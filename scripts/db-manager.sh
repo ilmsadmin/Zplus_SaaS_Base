@@ -1,11 +1,25 @@
 #!/bin/bash
 
-# Database Management Script
-# Comprehensive database operations for Zplus SaaS Base
+# Advanced Database Management Script for Zplus SaaS Base
+# Handles backup, restore, monitoring, and maintenance tasks
 
 set -e
 
-# Configuration
+# Configuration from environment variables
+POSTGRES_HOST=${POSTGRES_HOST:-localhost}
+POSTGRES_PORT=${POSTGRES_PORT:-5432}
+POSTGRES_DB=${POSTGRES_DB:-zplus_saas}
+POSTGRES_USER=${POSTGRES_USER:-postgres}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+
+MONGO_HOST=${MONGO_HOST:-localhost}
+MONGO_PORT=${MONGO_PORT:-27017}
+
+REDIS_HOST=${REDIS_HOST:-localhost}
+REDIS_PORT=${REDIS_PORT:-6379}
+
+BACKUP_DIR=${BACKUP_DIR:-./backups}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="docker-compose.database.yml"
 PROJECT_NAME="zplus"
 

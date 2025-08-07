@@ -84,10 +84,14 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      KC_LOG_LEVEL: INFO
+      KC_PROXY: edge
     ports:
       - "8081:8080"
     volumes:
       - keycloak_data:/opt/keycloak/data
+      - ./keycloak/realm-config:/opt/keycloak/realm-config:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +103,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(`auth.localhost`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
 
   # Traefik API Gateway
   traefik:

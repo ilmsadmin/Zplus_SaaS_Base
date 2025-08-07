@@ -35,9 +35,37 @@ dev-setup: ## Initial development environment setup
 	@echo "$(GREEN)Setting up development environment...$(RESET)"
 	@if [ ! -f .env ]; then cp .env.example .env; echo "$(YELLOW)Created .env file$(RESET)"; fi
 	@if [ ! -f $(BACKEND_DIR)/.env ]; then cp $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env; echo "$(YELLOW)Created backend .env file$(RESET)"; fi
-	@if [ ! -f $(FRONTEND_DIR)/.env ]; then cp $(FRONTEND_DIR)/.env.example $(FRONTEND_DIR)/.env; echo "$(YELLOW)Created frontend .env file$(RESET)"; fi
+	@if [ ! -f $(FRONTEND_DIR)/.env.local ]; then cp $(FRONTEND_DIR)/.env.example $(FRONTEND_DIR)/.env.local; echo "$(YELLOW)Created frontend .env.local file$(RESET)"; fi
 	@echo "$(GREEN)Development environment setup complete!$(RESET)"
 	@echo "$(YELLOW)Please review and update the .env files before running 'make dev-up'$(RESET)"
+	@echo ""
+	@echo "$(BLUE)Environment Files Created:$(RESET)"
+	@echo "  - .env (main configuration)"
+	@echo "  - backend/.env (backend-specific)"
+	@echo "  - frontend/.env.local (frontend-specific)"
+
+env-setup-staging: ## Setup staging environment configuration
+	@echo "$(GREEN)Setting up staging environment...$(RESET)"
+	@if [ ! -f .env ]; then cp .env.staging .env; echo "$(YELLOW)Created .env from staging template$(RESET)"; fi
+	@echo "$(RED)IMPORTANT: Update the secrets and database URLs in .env$(RESET)"
+	@echo "$(YELLOW)Generate secrets using: make generate-secrets$(RESET)"
+
+env-setup-production: ## Setup production environment configuration
+	@echo "$(GREEN)Setting up production environment...$(RESET)"
+	@if [ ! -f .env ]; then cp .env.production .env; echo "$(YELLOW)Created .env from production template$(RESET)"; fi
+	@echo "$(RED)CRITICAL: Update ALL secrets and production URLs in .env$(RESET)"
+	@echo "$(YELLOW)Generate secrets using: make generate-secrets$(RESET)"
+
+generate-secrets: ## Generate secure secrets for production
+	@echo "$(GREEN)Generating secure secrets...$(RESET)"
+	@echo ""
+	@echo "$(BLUE)Copy these secrets to your .env file:$(RESET)"
+	@echo "$(YELLOW)JWT_SECRET=$(RESET)$(shell openssl rand -base64 32)"
+	@echo "$(YELLOW)NEXTAUTH_SECRET=$(RESET)$(shell openssl rand -base64 32)"
+	@echo "$(YELLOW)ENCRYPTION_KEY=$(RESET)$(shell openssl rand -hex 16)"
+	@echo "$(YELLOW)SESSION_SECRET=$(RESET)$(shell openssl rand -base64 32)"
+	@echo ""
+	@echo "$(RED)⚠️  Store these secrets securely and never commit them to git!$(RESET)"
 
 dev-up: ## Start development environment
 	@echo "$(GREEN)Starting development environment...$(RESET)"
@@ -146,6 +174,33 @@ seed-data: ## Seed database with sample data
 	@echo "$(GREEN)Seeding database with sample data...$(RESET)"
 	@cd $(BACKEND_DIR) && go run cmd/seed/main.go
 	@echo "$(GREEN)Database seeded!$(RESET)"
+
+## Keycloak & Authentication
+keycloak-setup: ## Setup Keycloak realm and configuration
+	@echo "$(GREEN)Setting up Keycloak...$(RESET)"
+	@chmod +x keycloak/setup-keycloak.sh
+	@./keycloak/setup-keycloak.sh
+	@echo "$(GREEN)Keycloak setup completed!$(RESET)"
+
+keycloak-logs: ## View Keycloak logs
+	@docker-compose -f $(DOCKER_COMPOSE_DEV) logs -f keycloak
+
+keycloak-restart: ## Restart Keycloak service
+	@echo "$(YELLOW)Restarting Keycloak...$(RESET)"
+	@docker-compose -f $(DOCKER_COMPOSE_DEV) restart keycloak
+	@echo "$(GREEN)Keycloak restarted!$(RESET)"
+
+keycloak-admin: ## Open Keycloak Admin Console
+	@echo "$(BLUE)Opening Keycloak Admin Console...$(RESET)"
+	@echo "$(GREEN)URL: http://localhost:8081$(RESET)"
+	@echo "$(YELLOW)Username: admin$(RESET)"
+	@echo "$(YELLOW)Password: admin123$(RESET)"
+	@open http://localhost:8081 2>/dev/null || echo "$(YELLOW)Open http://localhost:8081 in your browser$(RESET)"
+
+auth-test: ## Test authentication endpoints
+	@echo "$(GREEN)Testing authentication...$(RESET)"
+	@chmod +x keycloak/test-auth.sh
+	@./keycloak/test-auth.sh
 
 ## Testing
 test: test-backend test-frontend ## Run all tests
@@ -385,5 +440,64 @@ info: ## Show environment information
 	@echo "$(YELLOW)Kubectl Version:$(RESET) $(shell kubectl version --client --short 2>/dev/null || echo 'Not installed')"
 	@echo "$(YELLOW)Helm Version:$(RESET) $(shell helm version --short 2>/dev/null || echo 'Not installed')"
 	@echo ""
+	@echo "$(BLUE)Environment Files:$(RESET)"
+	@if [ -f .env ]; then echo "  ✅ .env (main)"; else echo "  ❌ .env (missing - run 'make dev-setup')"; fi
+	@if [ -f $(BACKEND_DIR)/.env ]; then echo "  ✅ backend/.env"; else echo "  ❌ backend/.env (missing)"; fi
+	@if [ -f $(FRONTEND_DIR)/.env.local ]; then echo "  ✅ frontend/.env.local"; else echo "  ❌ frontend/.env.local (missing)"; fi
+	@echo ""
 	@echo "$(BLUE)Services Status:$(RESET)"
 	@docker-compose -f $(DOCKER_COMPOSE_DEV) ps 2>/dev/null || echo "$(YELLOW)Development environment not running$(RESET)"
+
+env-validate: ## Validate environment configuration
+	@echo "$(GREEN)Validating environment configuration...$(RESET)"
+	@echo ""
+	@echo "$(BLUE)Checking required environment files:$(RESET)"
+	@if [ -f .env ]; then echo "  ✅ .env exists"; else echo "  ❌ .env missing (run 'make dev-setup')"; exit 1; fi
+	@if [ -f $(BACKEND_DIR)/.env ]; then echo "  ✅ backend/.env exists"; else echo "  ❌ backend/.env missing"; exit 1; fi
+	@if [ -f $(FRONTEND_DIR)/.env.local ]; then echo "  ✅ frontend/.env.local exists"; else echo "  ❌ frontend/.env.local missing"; exit 1; fi
+	@echo ""
+	@echo "$(BLUE)Checking critical variables:$(RESET)"
+	@if grep -q "^DATABASE_URL=" .env 2>/dev/null; then echo "  ✅ DATABASE_URL configured"; else echo "  ❌ DATABASE_URL missing"; fi
+	@if grep -q "^MONGODB_URL=" .env 2>/dev/null; then echo "  ✅ MONGODB_URL configured"; else echo "  ❌ MONGODB_URL missing"; fi
+	@if grep -q "^REDIS_URL=" .env 2>/dev/null; then echo "  ✅ REDIS_URL configured"; else echo "  ❌ REDIS_URL missing"; fi
+	@if grep -q "^JWT_SECRET=" .env 2>/dev/null; then echo "  ✅ JWT_SECRET configured"; else echo "  ⚠️  JWT_SECRET missing or using default"; fi
+	@echo ""
+	@echo "$(GREEN)Environment validation complete!$(RESET)"
+
+env-check-secrets: ## Check if default/weak secrets are being used
+	@echo "$(YELLOW)Checking for default/weak secrets...$(RESET)"
+	@echo ""
+	@if grep -q "your-.*-secret\|dev-.*-secret\|not-for-production" .env 2>/dev/null; then \
+		echo "$(RED)⚠️  WARNING: Default or weak secrets detected in .env$(RESET)"; \
+		echo "$(YELLOW)Generate new secrets using: make generate-secrets$(RESET)"; \
+	else \
+		echo "$(GREEN)✅ No default secrets detected$(RESET)"; \
+	fi
+
+env-diff: ## Show differences between environment templates and current config
+	@echo "$(BLUE)Environment Configuration Differences:$(RESET)"
+	@echo ""
+	@if [ -f .env ] && [ -f .env.example ]; then \
+		echo "$(YELLOW)Main .env vs .env.example:$(RESET)"; \
+		diff .env.example .env || true; \
+		echo ""; \
+	fi
+	@if [ -f $(BACKEND_DIR)/.env ] && [ -f $(BACKEND_DIR)/.env.example ]; then \
+		echo "$(YELLOW)Backend .env vs .env.example:$(RESET)"; \
+		diff $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env || true; \
+		echo ""; \
+	fi
+
+env-list: ## List all environment variables from .env files
+	@echo "$(BLUE)Current Environment Variables:$(RESET)"
+	@echo ""
+	@if [ -f .env ]; then \
+		echo "$(YELLOW)Main .env:$(RESET)"; \
+		grep -E "^[A-Z_]+=.*" .env | sed 's/=.*/=***/' | head -20; \
+		echo ""; \
+	fi
+	@if [ -f $(BACKEND_DIR)/.env ]; then \
+		echo "$(YELLOW)Backend .env:$(RESET)"; \
+		grep -E "^[A-Z_]+=.*" $(BACKEND_DIR)/.env | sed 's/=.*/=***/' | head -10; \
+		echo ""; \
+	fi
