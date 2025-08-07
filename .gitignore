@@ -1,0 +1,379 @@
+# Zplus SaaS Base - Git Ignore Configuration
+
+# ================================
+# Environment & Configuration
+# ================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+.env.production
+
+# ================================
+# Backend (Go)
+# ================================
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.xml
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Go module cache
+go.sum
+
+# IDE specific files
+.vscode/settings.json
+.idea/
+
+# Air live reload
+tmp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+logs/
+
+# ================================
+# Frontend (Next.js/React)
+# ================================
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Production builds
+/.next/
+/out/
+build/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output
+
+# ESLint cache
+.eslintcache
+
+# Stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# ================================
+# Database & Storage
+# ================================
+
+# PostgreSQL
+*.sql
+*.backup
+*.dump
+
+# MongoDB
+*.bson
+
+# Redis
+dump.rdb
+
+# Local uploads
+uploads/
+storage/
+files/
+
+# ================================
+# Docker
+# ================================
+docker-compose.override.yml
+.dockerignore
+
+# ================================
+# Kubernetes
+# ================================
+secrets.yml
+secrets.yaml
+*-secret.yml
+*-secret.yaml
+
+# Helm
+helm/*/charts/
+helm/*/Chart.lock
+
+# ================================
+# Terraform
+# ================================
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+terraform.tfplan.json
+
+# ================================
+# CI/CD
+# ================================
+.github/workflows/*.yml.bak
+
+# ================================
+# Monitoring & Logs
+# ================================
+prometheus/data/
+grafana/data/
+loki/data/
+elasticsearch/data/
+
+# Application logs
+*.log
+logs/
+log/
+
+# ================================
+# IDE & Editor Files
+# ================================
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ================================
+# Operating System
+# ================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ================================
+# Package Managers
+# ================================
+
+# npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Yarn
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# pnpm
+.pnpm-store/
+
+# ================================
+# Testing
+# ================================
+
+# Test results
+test-results/
+test-report.xml
+coverage.xml
+.coverage
+htmlcov/
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Jest
+.jest-cache/
+
+# ================================
+# Documentation
+# ================================
+
+# Generated documentation
+docs/_build/
+docs/dist/
+site/
+
+# ================================
+# Certificates & Keys
+# ================================
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# ================================
+# Backup Files
+# ================================
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.tmp
+
+# ================================
+# Cache Directories
+# ================================
+.cache/
+.parcel-cache/
+.sass-cache/
+
+# ================================
+# Build Tools
+# ================================
+.grunt
+bower_components
+
+# ================================
+# Misc
+# ================================
+.env.example.local
+dump.rdb
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Custom ignore patterns for this project
+# Add any project-specific ignores below this line
+
+# Development databases
+dev.db
+test.db
+
+# Local configuration overrides
+config.local.json
+settings.local.json
+
+# Generated GraphQL files (if using code generation)
+**/generated/
+**/__generated__/
+
+# Temporary build artifacts
+.build/
+.dist/
