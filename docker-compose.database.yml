@@ -1,0 +1,184 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: zplus_postgres
+    environment:
+      POSTGRES_DB: zplus_saas_base
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init:/docker-entrypoint-initdb.d
+    networks:
+      - zplus_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zplus_saas_base"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7-jammy
+    container_name: zplus_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: mongodb123
+      MONGO_INITDB_DATABASE: zplus_saas_base
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./backend/database/mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - zplus_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: zplus_redis
+    command: redis-server --requirepass redis123 --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./backend/database/redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - zplus_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin for PostgreSQL Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: zplus_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@zplus.io
+      PGADMIN_DEFAULT_PASSWORD: pgadmin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./backend/database/pgadmin/servers.json:/pgadmin4/servers.json
+    networks:
+      - zplus_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Mongo Express for MongoDB Management
+  mongo-express:
+    image: mongo-express:latest
+    container_name: zplus_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: mongodb123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:mongodb123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: mongoexpress123
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: 'true'
+    ports:
+      - "8081:8081"
+    networks:
+      - zplus_network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Redis Commander for Redis Management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: zplus_redis_commander
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:redis123
+      HTTP_USER: admin
+      HTTP_PASSWORD: rediscommander123
+    ports:
+      - "8082:8081"
+    networks:
+      - zplus_network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Adminer - Universal Database Management Tool
+  adminer:
+    image: adminer:latest
+    container_name: zplus_adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: lucas
+      ADMINER_PLUGINS: 'tables-filter tinymce'
+    ports:
+      - "8083:8080"
+    networks:
+      - zplus_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Database Backup Service
+  db-backup:
+    image: postgres:16-alpine
+    container_name: zplus_db_backup
+    environment:
+      PGPASSWORD: postgres123
+    volumes:
+      - ./backups:/backups
+      - ./backend/database/backup-scripts:/scripts
+    networks:
+      - zplus_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Database backup service started';
+        while true; do
+          echo 'Creating backup at $(date)';
+          pg_dump -h postgres -U postgres -d zplus_saas_base > /backups/zplus_backup_$(date +%Y%m%d_%H%M%S).sql;
+          echo 'Backup completed';
+          sleep 86400;
+        done
+      "
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  zplus_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

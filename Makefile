@@ -2,7 +2,7 @@
 # Author: Zplus Team
 # Description: Development and deployment automation
 
-.PHONY: help dev-setup dev-up dev-down dev-logs test build deploy clean
+.PHONY: help dev-setup dev-up dev-down dev-logs test build deploy clean db-setup db-start db-stop db-status db-logs db-backup db-reset db-tools db-monitor
 
 # Default target
 .DEFAULT_GOAL := help
@@ -10,10 +10,12 @@
 # Variables
 PROJECT_NAME := zplus-saas-base
 DOCKER_COMPOSE_DEV := docker-compose.dev.yml
+DOCKER_COMPOSE_DB := docker-compose.database.yml
 DOCKER_COMPOSE_PROD := docker-compose.prod.yml
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 DOCS_DIR := docs
+DB_SCRIPT := scripts/db-manager.sh
 
 # Colors for output
 RED := \033[31m
@@ -74,7 +76,62 @@ migrate-up: ## Run database migrations
 	@cd $(BACKEND_DIR) && go run cmd/migrate/main.go up
 	@echo "$(GREEN)Migrations completed!$(RESET)"
 
-migrate-down: ## Rollback database migrations
+## Database Management
+db-setup: ## Setup databases with migrations and seeders
+	@echo "$(GREEN)Setting up databases...$(RESET)"
+	@$(DB_SCRIPT) setup
+	@echo "$(GREEN)Database setup completed!$(RESET)"
+
+db-start: ## Start database services
+	@echo "$(GREEN)Starting database services...$(RESET)"
+	@$(DB_SCRIPT) start
+
+db-stop: ## Stop database services
+	@echo "$(YELLOW)Stopping database services...$(RESET)"
+	@$(DB_SCRIPT) stop
+
+db-restart: ## Restart database services
+	@echo "$(YELLOW)Restarting database services...$(RESET)"
+	@$(DB_SCRIPT) restart
+
+db-status: ## Show database services status
+	@$(DB_SCRIPT) status
+
+db-logs: ## Show database logs (usage: make db-logs service=postgres)
+	@$(DB_SCRIPT) logs $(service)
+
+db-backup: ## Create database backup
+	@echo "$(GREEN)Creating database backup...$(RESET)"
+	@$(DB_SCRIPT) backup
+
+db-reset: ## Reset databases (WARNING: Deletes all data)
+	@echo "$(RED)WARNING: This will delete all database data!$(RESET)"
+	@$(DB_SCRIPT) reset
+
+db-tools: ## Show database management tools URLs
+	@$(DB_SCRIPT) tools
+
+db-monitor: ## Real-time database performance monitoring
+	@$(DB_SCRIPT) monitor
+
+db-migrate: ## Run database migrations
+	@echo "$(GREEN)Running database migrations...$(RESET)"
+	@cd $(BACKEND_DIR)/database && ./db-migrate.sh migrate
+
+db-seed: ## Run database seeders
+	@echo "$(GREEN)Running database seeders...$(RESET)"
+	@cd $(BACKEND_DIR)/database && ./db-migrate.sh seed
+
+## Database Quick Commands
+db-dev: db-setup ## Quick database setup for development
+	@echo "$(BLUE)Database development environment ready!$(RESET)"
+	@echo "$(GREEN)Management Tools:$(RESET)"
+	@echo "  - pgAdmin (PostgreSQL): http://localhost:8080"
+	@echo "  - Mongo Express: http://localhost:8081"
+	@echo "  - Redis Commander: http://localhost:8082"
+	@echo "  - Adminer: http://localhost:8083"
+
+migrate-rollback: ## Rollback last migration
 	@echo "$(YELLOW)Rolling back database migrations...$(RESET)"
 	@cd $(BACKEND_DIR) && go run cmd/migrate/main.go down 1
 	@echo "$(GREEN)Rollback completed!$(RESET)"
