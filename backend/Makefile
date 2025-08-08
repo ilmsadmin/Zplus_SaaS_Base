@@ -96,11 +96,11 @@ check: fmt vet lint ## Run all code quality checks
 # Database
 db-migrate-up: ## Run database migrations up
 	@echo "Running database migrations up..."
-	migrate -path database/migrations -database "postgres://postgres:postgres@localhost:5432/zplus_saas?sslmode=disable" up
+	migrate -path database/migrations -database "postgres://postgres:postgres123@localhost:5432/zplus_saas_base?sslmode=disable" up
 
 db-migrate-down: ## Run database migrations down
 	@echo "Running database migrations down..."
-	migrate -path database/migrations -database "postgres://postgres:postgres@localhost:5432/zplus_saas?sslmode=disable" down
+	migrate -path database/migrations -database "postgres://postgres:postgres123@localhost:5432/zplus_saas_base?sslmode=disable" down
 
 db-migrate-create: ## Create a new migration file (usage: make db-migrate-create NAME=migration_name)
 	@echo "Creating migration: $(NAME)"
@@ -190,4 +190,4 @@ tag: ## Create a new tag (usage: make tag VERSION=v1.0.0)
 # Database inspection
 db-status: ## Show database migration status
 	@echo "Database migration status:"
-	migrate -path database/migrations -database "postgres://postgres:postgres@localhost:5432/zplus_saas?sslmode=disable" version
+	migrate -path database/migrations -database "postgres://postgres:postgres123@localhost:5432/zplus_saas_base?sslmode=disable" version

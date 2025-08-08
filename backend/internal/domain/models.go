@@ -176,7 +176,7 @@ type DomainRegistrationEvent struct {
 // DNSRecord represents DNS record management
 type DNSRecord struct {
 	ID             uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	DomainID       int                    `json:"domain_id" gorm:"not null"`
+	DomainID       uuid.UUID              `json:"domain_id" gorm:"type:uuid;not null"`
 	RecordType     string                 `json:"record_type" gorm:"not null"` // A, AAAA, CNAME, MX, TXT, etc.
 	Name           string                 `json:"name" gorm:"not null"`        // subdomain or @ for root
 	Value          string                 `json:"value" gorm:"not null"`
@@ -1871,4 +1871,219 @@ type PaymentData struct {
 	Method          string                 `json:"method"`
 	MethodTitle     string                 `json:"method_title"`
 	GatewayResponse map[string]interface{} `json:"gateway_response"`
+}
+
+// ============================
+// Reporting & Analytics Models
+// ============================
+
+// AnalyticsReport represents a generated analytics report
+type AnalyticsReport struct {
+	ID              uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID        string                 `json:"tenant_id" gorm:"type:varchar(50);not null;index"`
+	UserID          uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index"`
+	ReportType      string                 `json:"report_type" gorm:"not null;index"` // sales, users, system, inventory, financial
+	ReportSubtype   string                 `json:"report_subtype"`                    // daily, weekly, monthly, custom
+	Title           string                 `json:"title" gorm:"not null"`
+	Description     string                 `json:"description"`
+	PeriodStart     time.Time              `json:"period_start" gorm:"index"`
+	PeriodEnd       time.Time              `json:"period_end" gorm:"index"`
+	Parameters      map[string]interface{} `json:"parameters" gorm:"type:jsonb;default:'{}'"`
+	ReportData      map[string]interface{} `json:"report_data" gorm:"type:jsonb;default:'{}'"`
+	Summary         map[string]interface{} `json:"summary" gorm:"type:jsonb;default:'{}'"`
+	FilePath        string                 `json:"file_path"`
+	FileURL         string                 `json:"file_url"`
+	FileFormat      string                 `json:"file_format" gorm:"default:'json'"` // json, pdf, excel, csv
+	FileSize        int64                  `json:"file_size" gorm:"default:0"`
+	Status          string                 `json:"status" gorm:"default:'pending'"` // pending, processing, completed, failed, expired
+	ErrorMessage    string                 `json:"error_message"`
+	ScheduledFor    *time.Time             `json:"scheduled_for"`
+	ProcessingStats map[string]interface{} `json:"processing_stats" gorm:"type:jsonb;default:'{}'"`
+	ExpiresAt       *time.Time             `json:"expires_at"`
+	DownloadCount   int                    `json:"download_count" gorm:"default:0"`
+	LastDownloadAt  *time.Time             `json:"last_download_at"`
+	IsRecurring     bool                   `json:"is_recurring" gorm:"default:false"`
+	RecurrenceRule  string                 `json:"recurrence_rule"`
+	NextRunAt       *time.Time             `json:"next_run_at"`
+	Tags            []string               `json:"tags" gorm:"type:text[]"`
+	Metadata        map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	CompletedAt     *time.Time             `json:"completed_at"`
+	DeletedAt       *time.Time             `json:"deleted_at" gorm:"index"`
+}
+
+// UserActivityMetrics represents user activity tracking
+type UserActivityMetrics struct {
+	ID                 uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID           string                 `json:"tenant_id" gorm:"type:varchar(50);not null;index"`
+	UserID             uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index"`
+	Date               time.Time              `json:"date" gorm:"type:date;not null;index"`
+	SessionID          string                 `json:"session_id" gorm:"index"`
+	PageViews          int                    `json:"page_views" gorm:"default:0"`
+	UniquePages        int                    `json:"unique_pages" gorm:"default:0"`
+	SessionDuration    int                    `json:"session_duration" gorm:"default:0"` // in seconds
+	ActionsCount       int                    `json:"actions_count" gorm:"default:0"`
+	LoginCount         int                    `json:"login_count" gorm:"default:0"`
+	LastSeenAt         *time.Time             `json:"last_seen_at"`
+	DeviceType         string                 `json:"device_type"` // desktop, mobile, tablet
+	Browser            string                 `json:"browser"`
+	Platform           string                 `json:"platform"`
+	Country            string                 `json:"country"`
+	Region             string                 `json:"region"`
+	City               string                 `json:"city"`
+	IPAddress          string                 `json:"ip_address"`
+	ReferrerDomain     string                 `json:"referrer_domain"`
+	ReferrerURL        string                 `json:"referrer_url"`
+	ActivityData       map[string]interface{} `json:"activity_data" gorm:"type:jsonb;default:'{}'"`
+	PerformanceMetrics map[string]interface{} `json:"performance_metrics" gorm:"type:jsonb;default:'{}'"`
+	ErrorsCount        int                    `json:"errors_count" gorm:"default:0"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+}
+
+// SystemUsageMetrics represents system-level usage tracking
+type SystemUsageMetrics struct {
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID    string    `json:"tenant_id" gorm:"type:varchar(50);not null;index"`
+	Date        time.Time `json:"date" gorm:"type:date;not null;index"`
+	Hour        int       `json:"hour" gorm:"not null;index"` // 0-23 for hourly metrics
+	MetricType  string    `json:"metric_type" gorm:"not null;index"`
+	MetricName  string    `json:"metric_name" gorm:"not null;index"`
+	MetricValue float64   `json:"metric_value" gorm:"default:0"`
+	MetricUnit  string    `json:"metric_unit" gorm:"default:'count'"`
+	// API Usage
+	APICallsTotal   int `json:"api_calls_total" gorm:"default:0"`
+	APICallsSuccess int `json:"api_calls_success" gorm:"default:0"`
+	APICallsError   int `json:"api_calls_error" gorm:"default:0"`
+	APIResponseTime int `json:"api_response_time" gorm:"default:0"` // average in ms
+	// Storage Usage
+	StorageUsed     int64 `json:"storage_used" gorm:"default:0"`   // bytes
+	BandwidthUsed   int64 `json:"bandwidth_used" gorm:"default:0"` // bytes
+	FilesUploaded   int   `json:"files_uploaded" gorm:"default:0"`
+	FilesDownloaded int   `json:"files_downloaded" gorm:"default:0"`
+	// Database Usage
+	DatabaseQueries   int `json:"database_queries" gorm:"default:0"`
+	DatabaseQueryTime int `json:"database_query_time" gorm:"default:0"` // total ms
+	// User Metrics
+	ActiveUsers     int `json:"active_users" gorm:"default:0"`
+	NewUsers        int `json:"new_users" gorm:"default:0"`
+	SessionsCreated int `json:"sessions_created" gorm:"default:0"`
+	LoginAttempts   int `json:"login_attempts" gorm:"default:0"`
+	LoginSuccessful int `json:"login_successful" gorm:"default:0"`
+	// POS Metrics (if applicable)
+	OrdersCreated     int     `json:"orders_created" gorm:"default:0"`
+	Revenue           float64 `json:"revenue" gorm:"default:0"`
+	PaymentsProcessed int     `json:"payments_processed" gorm:"default:0"`
+	// Custom metrics
+	CustomMetrics map[string]interface{} `json:"custom_metrics" gorm:"type:jsonb;default:'{}'"`
+	Metadata      map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
+}
+
+// ReportExport represents an export request/status
+type ReportExport struct {
+	ID             uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID       string                 `json:"tenant_id" gorm:"type:varchar(50);not null;index"`
+	UserID         uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index"`
+	ReportID       *uuid.UUID             `json:"report_id" gorm:"type:uuid;index"` // Optional, for existing reports
+	ExportType     string                 `json:"export_type" gorm:"not null"`      // pdf, excel, csv
+	ReportType     string                 `json:"report_type" gorm:"not null"`      // sales, users, system, etc
+	Title          string                 `json:"title" gorm:"not null"`
+	Parameters     map[string]interface{} `json:"parameters" gorm:"type:jsonb;default:'{}'"`
+	DataQuery      map[string]interface{} `json:"data_query" gorm:"type:jsonb;default:'{}'"`
+	Template       string                 `json:"template"` // template used for export
+	FilePath       string                 `json:"file_path"`
+	FileURL        string                 `json:"file_url"`
+	FileSize       int64                  `json:"file_size" gorm:"default:0"`
+	Status         string                 `json:"status" gorm:"default:'pending'"` // pending, processing, completed, failed
+	Progress       int                    `json:"progress" gorm:"default:0"`       // 0-100
+	ErrorMessage   string                 `json:"error_message"`
+	RowsProcessed  int                    `json:"rows_processed" gorm:"default:0"`
+	TotalRows      int                    `json:"total_rows" gorm:"default:0"`
+	StartedAt      *time.Time             `json:"started_at"`
+	CompletedAt    *time.Time             `json:"completed_at"`
+	ExpiresAt      *time.Time             `json:"expires_at"`
+	DownloadCount  int                    `json:"download_count" gorm:"default:0"`
+	LastDownloadAt *time.Time             `json:"last_download_at"`
+	Metadata       map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
+	DeletedAt      *time.Time             `json:"deleted_at" gorm:"index"`
+}
+
+// ReportSchedule represents scheduled recurring reports
+type ReportSchedule struct {
+	ID              uuid.UUID              `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	TenantID        string                 `json:"tenant_id" gorm:"type:varchar(50);not null;index"`
+	UserID          uuid.UUID              `json:"user_id" gorm:"type:uuid;not null;index"`
+	Name            string                 `json:"name" gorm:"not null"`
+	Description     string                 `json:"description"`
+	ReportType      string                 `json:"report_type" gorm:"not null"`
+	ReportSubtype   string                 `json:"report_subtype"`
+	Parameters      map[string]interface{} `json:"parameters" gorm:"type:jsonb;default:'{}'"`
+	Schedule        string                 `json:"schedule" gorm:"not null"` // cron expression
+	OutputFormats   []string               `json:"output_formats" gorm:"type:text[]"`
+	EmailRecipients []string               `json:"email_recipients" gorm:"type:text[]"`
+	RetentionDays   int                    `json:"retention_days" gorm:"default:30"`
+	IsActive        bool                   `json:"is_active" gorm:"default:true"`
+	LastRunAt       *time.Time             `json:"last_run_at"`
+	NextRunAt       *time.Time             `json:"next_run_at"`
+	RunCount        int                    `json:"run_count" gorm:"default:0"`
+	ErrorCount      int                    `json:"error_count" gorm:"default:0"`
+	LastError       string                 `json:"last_error"`
+	Metadata        map[string]interface{} `json:"metadata" gorm:"type:jsonb;default:'{}'"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	DeletedAt       *time.Time             `json:"deleted_at" gorm:"index"`
+}
+
+// ============================
+// Reporting Filters & DTOs
+// ============================
+
+// ReportFilter for filtering reports
+type ReportFilter struct {
+	ReportType    *string    `json:"report_type,omitempty"`
+	ReportSubtype *string    `json:"report_subtype,omitempty"`
+	Status        *string    `json:"status,omitempty"`
+	UserID        *uuid.UUID `json:"user_id,omitempty"`
+	StartDate     *time.Time `json:"start_date,omitempty"`
+	EndDate       *time.Time `json:"end_date,omitempty"`
+	Tags          []string   `json:"tags,omitempty"`
+	Page          int        `json:"page" validate:"min=1"`
+	Limit         int        `json:"limit" validate:"min=1,max=100"`
+	SortBy        string     `json:"sort_by"`
+	SortOrder     string     `json:"sort_order" validate:"oneof=asc desc"`
+}
+
+// ActivityMetricsFilter for filtering user activity metrics
+type ActivityMetricsFilter struct {
+	UserID      *uuid.UUID `json:"user_id,omitempty"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+	DeviceType  *string    `json:"device_type,omitempty"`
+	Country     *string    `json:"country,omitempty"`
+	Page        int        `json:"page" validate:"min=1"`
+	Limit       int        `json:"limit" validate:"min=1,max=100"`
+	SortBy      string     `json:"sort_by"`
+	SortOrder   string     `json:"sort_order" validate:"oneof=asc desc"`
+	GroupBy     string     `json:"group_by"`    // date, user, country, device
+	Aggregation string     `json:"aggregation"` // sum, avg, count
+}
+
+// SystemMetricsFilter for filtering system usage metrics
+type SystemMetricsFilter struct {
+	MetricType  *string    `json:"metric_type,omitempty"`
+	MetricName  *string    `json:"metric_name,omitempty"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+	Hour        *int       `json:"hour,omitempty"`
+	Page        int        `json:"page" validate:"min=1"`
+	Limit       int        `json:"limit" validate:"min=1,max=100"`
+	SortBy      string     `json:"sort_by"`
+	SortOrder   string     `json:"sort_order" validate:"oneof=asc desc"`
+	GroupBy     string     `json:"group_by"`    // date, hour, metric_type
+	Aggregation string     `json:"aggregation"` // sum, avg, count, max, min
 }

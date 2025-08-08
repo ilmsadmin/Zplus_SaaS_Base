@@ -10,7 +10,7 @@ import (
 
 type RegisterDomainRequest struct {
 	Domain             string                 `json:"domain" validate:"required,fqdn"`
-	TenantID           uuid.UUID              `json:	DomainID uuid.UUID `json:"domain_id" validate:"required"`tenant_id" validate:"required"`
+	TenantID           uuid.UUID              `json:"tenant_id" validate:"required"`
 	RegistrarProvider  string                 `json:"registrar_provider" validate:"required"`
 	RegistrationPeriod int                    `json:"registration_period" validate:"min=1,max=10"` // years
 	AutoRenew          bool                   `json:"auto_renew"`
@@ -66,16 +66,16 @@ type DomainAvailabilityResponse struct {
 // DNS Management DTOs
 
 type CreateDNSRecordRequest struct {
-	DomainID uuid.UUID    `json:"domain_id" validate:"required"`
-	Type     string `json:"type" validate:"required,oneof=A AAAA CNAME MX TXT NS PTR SRV CAA"`
-	Name     string `json:"name" validate:"required"`
-	Value    string `json:"value" validate:"required"`
-	TTL      *int   `json:"ttl,omitempty"`
-	Priority *int   `json:"priority,omitempty"`
-	Weight   *int   `json:"weight,omitempty"`
-	Port     *int   `json:"port,omitempty"`
-	Purpose  string `json:"purpose,omitempty"`
-	Notes    string `json:"notes,omitempty"`
+	DomainID uuid.UUID `json:"domain_id" validate:"required"`
+	Type     string    `json:"type" validate:"required,oneof=A AAAA CNAME MX TXT NS PTR SRV CAA"`
+	Name     string    `json:"name" validate:"required"`
+	Value    string    `json:"value" validate:"required"`
+	TTL      *int      `json:"ttl,omitempty"`
+	Priority *int      `json:"priority,omitempty"`
+	Weight   *int      `json:"weight,omitempty"`
+	Port     *int      `json:"port,omitempty"`
+	Purpose  string    `json:"purpose,omitempty"`
+	Notes    string    `json:"notes,omitempty"`
 }
 
 type UpdateDNSRecordRequest struct {
@@ -90,7 +90,7 @@ type UpdateDNSRecordRequest struct {
 
 type DNSRecordResponse struct {
 	ID             uuid.UUID              `json:"id"`
-	DomainID       int                    `json:"domain_id"`
+	DomainID       uuid.UUID              `json:"domain_id"`
 	Type           string                 `json:"type"`
 	Name           string                 `json:"name"`
 	Value          string                 `json:"value"`
@@ -110,12 +110,12 @@ type DNSRecordResponse struct {
 }
 
 type BulkDNSOperationRequest struct {
-	DomainID uuid.UUID                      `json:"domain_id" validate:"required"`
+	DomainID uuid.UUID                `json:"domain_id" validate:"required"`
 	Records  []CreateDNSRecordRequest `json:"records" validate:"required,min=1"`
 }
 
 type DNSZoneResponse struct {
-	DomainID uuid.UUID                 `json:"domain_id"`
+	DomainID uuid.UUID           `json:"domain_id"`
 	Domain   string              `json:"domain"`
 	Records  []DNSRecordResponse `json:"records"`
 	SOA      *DNSRecordResponse  `json:"soa,omitempty"`
@@ -125,13 +125,13 @@ type DNSZoneResponse struct {
 // Domain Ownership Verification DTOs
 
 type InitiateDomainVerificationRequest struct {
-	DomainID           int    `json:"domain_id" validate:"required"`
-	VerificationMethod string `json:"verification_method" validate:"required,oneof=dns_txt dns_cname file_upload email meta_tag"`
+	DomainID           uuid.UUID `json:"domain_id" validate:"required"`
+	VerificationMethod string    `json:"verification_method" validate:"required,oneof=dns_txt dns_cname file_upload email meta_tag"`
 }
 
 type DomainVerificationResponse struct {
 	ID                 uuid.UUID              `json:"id"`
-	DomainID           int                    `json:"domain_id"`
+	DomainID           uuid.UUID              `json:"domain_id"`
 	VerificationMethod string                 `json:"verification_method"`
 	Status             string                 `json:"status"`
 	VerificationToken  string                 `json:"verification_token"`
@@ -155,17 +155,17 @@ type VerifyDomainOwnershipRequest struct {
 // SSL Certificate Management DTOs
 
 type RequestSSLCertificateRequest struct {
-	DomainID        int      `json:"domain_id" validate:"required"`
-	CertificateType string   `json:"certificate_type" validate:"oneof=domain_validated organization_validated extended_validation"`
-	ChallengeType   string   `json:"challenge_type" validate:"required,oneof=http-01 dns-01 tls-alpn-01"`
-	KeyType         string   `json:"key_type" validate:"oneof=rsa ecdsa"`
-	KeySize         *int     `json:"key_size,omitempty"`
-	Domains         []string `json:"domains,omitempty"` // Additional domains for SAN certificate
+	DomainID        uuid.UUID `json:"domain_id" validate:"required"`
+	CertificateType string    `json:"certificate_type" validate:"oneof=domain_validated organization_validated extended_validation"`
+	ChallengeType   string    `json:"challenge_type" validate:"required,oneof=http-01 dns-01 tls-alpn-01"`
+	KeyType         string    `json:"key_type" validate:"oneof=rsa ecdsa"`
+	KeySize         *int      `json:"key_size,omitempty"`
+	Domains         []string  `json:"domains,omitempty"` // Additional domains for SAN certificate
 }
 
 type SSLCertificateRequestResponse struct {
 	ID                uuid.UUID              `json:"id"`
-	DomainID          int                    `json:"domain_id"`
+	DomainID          uuid.UUID              `json:"domain_id"`
 	RequestType       string                 `json:"request_type"`
 	ChallengeType     string                 `json:"challenge_type"`
 	Status            string                 `json:"status"`
@@ -187,7 +187,7 @@ type SSLCertificateRequestResponse struct {
 
 type SSLCertificateResponse struct {
 	ID                 uint       `json:"id"`
-	DomainID           int        `json:"domain_id"`
+	DomainID           uuid.UUID  `json:"domain_id"`
 	Issuer             string     `json:"issuer"`
 	SerialNumber       string     `json:"serial_number"`
 	Fingerprint        string     `json:"fingerprint"`
@@ -213,11 +213,11 @@ type RenewSSLCertificateRequest struct {
 // Domain Health Check DTOs
 
 type CreateDomainHealthCheckRequest struct {
-	DomainID         int    `json:"domain_id" validate:"required"`
-	CheckType        string `json:"check_type" validate:"required,oneof=http https dns ssl ping"`
-	CheckFrequency   *int   `json:"check_frequency,omitempty"`   // seconds
-	TimeoutThreshold *int   `json:"timeout_threshold,omitempty"` // seconds
-	AlertsEnabled    *bool  `json:"alerts_enabled,omitempty"`
+	DomainID         uuid.UUID `json:"domain_id" validate:"required"`
+	CheckType        string    `json:"check_type" validate:"required,oneof=http https dns ssl ping"`
+	CheckFrequency   *int      `json:"check_frequency,omitempty"`   // seconds
+	TimeoutThreshold *int      `json:"timeout_threshold,omitempty"` // seconds
+	AlertsEnabled    *bool     `json:"alerts_enabled,omitempty"`
 }
 
 type UpdateDomainHealthCheckRequest struct {
@@ -228,7 +228,7 @@ type UpdateDomainHealthCheckRequest struct {
 
 type DomainHealthCheckResponse struct {
 	ID               uuid.UUID              `json:"id"`
-	DomainID         int                    `json:"domain_id"`
+	DomainID         uuid.UUID              `json:"domain_id"`
 	CheckType        string                 `json:"check_type"`
 	Status           string                 `json:"status"`
 	ResponseTime     int                    `json:"response_time"`
@@ -261,14 +261,14 @@ type DomainStatsResponse struct {
 }
 
 type DomainMetricsRequest struct {
-	DomainID    int       `json:"domain_id" validate:"required"`
+	DomainID    uuid.UUID `json:"domain_id" validate:"required"`
 	MetricTypes []string  `json:"metric_types" validate:"required"`
 	From        time.Time `json:"from" validate:"required"`
 	To          time.Time `json:"to" validate:"required"`
 }
 
 type DomainMetricsResponse struct {
-	DomainID    int                    `json:"domain_id"`
+	DomainID    uuid.UUID              `json:"domain_id"`
 	Metrics     map[string]interface{} `json:"metrics"`
 	LastUpdated time.Time              `json:"last_updated"`
 }

@@ -204,47 +204,42 @@ func (s *DomainManagementService) ListDomainRegistrations(ctx context.Context, f
 // DNS Record Operations
 
 func (s *DomainManagementService) CreateDNSRecord(ctx context.Context, req *CreateDNSRecordRequest) (*DNSRecordResponse, error) {
-	// TODO: Fix type mismatch - req.DomainID is int but should be uuid.UUID
-	return nil, fmt.Errorf("method temporarily disabled due to type mismatch")
+	// Create DNS record
+	record := &domain.DNSRecord{
+		ID:         uuid.New(),
+		DomainID:   req.DomainID,
+		RecordType: req.Type,
+		Name:       req.Name,
+		Value:      req.Value,
+		TTL:        300, // Default TTL
+		IsManaged:  true,
+		Purpose:    req.Purpose,
+		Status:     "pending",
+		Notes:      req.Notes,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
 
-	/*
-		// Create DNS record
-		record := &domain.DNSRecord{
-			ID:         uuid.New(),
-			DomainID:   req.DomainID,
-			RecordType: req.Type,
-			Name:       req.Name,
-			Value:      req.Value,
-			TTL:        300, // Default TTL
-			IsManaged:  true,
-			Purpose:    req.Purpose,
-			Status:     "pending",
-			Notes:      req.Notes,
-			CreatedAt:  time.Now(),
-			UpdatedAt:  time.Now(),
-		}
+	if req.TTL != nil {
+		record.TTL = *req.TTL
+	}
+	if req.Priority != nil {
+		record.Priority = req.Priority
+	}
+	if req.Weight != nil {
+		record.Weight = req.Weight
+	}
+	if req.Port != nil {
+		record.Port = req.Port
+	}
 
-		if req.TTL != nil {
-			record.TTL = *req.TTL
-		}
-		if req.Priority != nil {
-			record.Priority = req.Priority
-		}
-		if req.Weight != nil {
-			record.Weight = req.Weight
-		}
-		if req.Port != nil {
-			record.Port = req.Port
-		}
+	if err := s.dnsRecordRepo.Create(ctx, record); err != nil {
+		return nil, fmt.Errorf("failed to create DNS record: %w", err)
+	}
 
-		if err := s.dnsRecordRepo.Create(ctx, record); err != nil {
-			return nil, fmt.Errorf("failed to create DNS record: %w", err)
-		}
+	// TODO: Create record in actual DNS provider
 
-		// TODO: Create record in actual DNS provider
-
-		return s.mapDNSRecordResponse(record), nil
-	*/
+	return s.mapDNSRecordResponse(record), nil
 }
 
 func (s *DomainManagementService) GetDNSRecord(ctx context.Context, id uuid.UUID) (*DNSRecordResponse, error) {
@@ -322,7 +317,6 @@ func (s *DomainManagementService) GetDNSRecordsByDomain(ctx context.Context, dom
 
 // Helper functions
 
-/*
 func (s *DomainManagementService) mapDomainRegistrationResponse(registration *domain.DomainRegistration) *DomainRegistrationResponse {
 	return &DomainRegistrationResponse{
 		ID:                 registration.ID,
@@ -344,7 +338,6 @@ func (s *DomainManagementService) mapDomainRegistrationResponse(registration *do
 		UpdatedAt:          registration.UpdatedAt,
 	}
 }
-*/
 
 func (s *DomainManagementService) mapDNSRecordResponse(record *domain.DNSRecord) *DNSRecordResponse {
 	return &DNSRecordResponse{

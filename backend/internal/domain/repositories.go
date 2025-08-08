@@ -599,3 +599,194 @@ type ServiceQueryStats struct {
 	AvgFieldCount  float64 `json:"avg_field_count"`
 	HealthScore    float64 `json:"health_score"`
 }
+
+// ===========================
+// Reporting & Analytics Repositories
+// ===========================
+
+// AnalyticsReportRepository defines the interface for analytics report operations
+type AnalyticsReportRepository interface {
+	// Basic CRUD operations
+	Create(ctx context.Context, report *AnalyticsReport) error
+	GetByID(ctx context.Context, id uuid.UUID) (*AnalyticsReport, error)
+	Update(ctx context.Context, report *AnalyticsReport) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetByTenantID(ctx context.Context, tenantID string, filter *ReportFilter) ([]*AnalyticsReport, int64, error)
+
+	// Report lifecycle operations
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string, errorMessage string) error
+	UpdateProgress(ctx context.Context, id uuid.UUID, progress int, stats map[string]interface{}) error
+	UpdateFileInfo(ctx context.Context, id uuid.UUID, filePath, fileURL string, fileSize int64) error
+	MarkCompleted(ctx context.Context, id uuid.UUID, filePath, fileURL string, fileSize int64) error
+	MarkFailed(ctx context.Context, id uuid.UUID, errorMessage string) error
+
+	// Download tracking
+	IncrementDownloadCount(ctx context.Context, id uuid.UUID) error
+	UpdateLastDownload(ctx context.Context, id uuid.UUID) error
+
+	// Scheduled reports
+	GetScheduledReports(ctx context.Context, before time.Time) ([]*AnalyticsReport, error)
+	UpdateNextRun(ctx context.Context, id uuid.UUID, nextRunAt time.Time) error
+
+	// Cleanup operations
+	DeleteExpiredReports(ctx context.Context, before time.Time) (int64, error)
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+
+	// Search and filtering
+	SearchReports(ctx context.Context, tenantID, query string, limit, offset int) ([]*AnalyticsReport, int64, error)
+	GetReportsByType(ctx context.Context, tenantID, reportType string, limit, offset int) ([]*AnalyticsReport, error)
+	GetRecentReports(ctx context.Context, tenantID string, limit int) ([]*AnalyticsReport, error)
+}
+
+// UserActivityMetricsRepository defines the interface for user activity tracking
+type UserActivityMetricsRepository interface {
+	// Basic CRUD operations
+	Create(ctx context.Context, metrics *UserActivityMetrics) error
+	GetByID(ctx context.Context, id uuid.UUID) (*UserActivityMetrics, error)
+	Update(ctx context.Context, metrics *UserActivityMetrics) error
+	Delete(ctx context.Context, id uuid.UUID) error
+
+	// Activity tracking
+	RecordUserActivity(ctx context.Context, tenantID string, userID uuid.UUID, sessionID string, activityData map[string]interface{}) error
+	UpdateSessionDuration(ctx context.Context, tenantID string, userID uuid.UUID, sessionID string, duration int) error
+	IncrementPageViews(ctx context.Context, tenantID string, userID uuid.UUID, date time.Time) error
+	IncrementActions(ctx context.Context, tenantID string, userID uuid.UUID, date time.Time, count int) error
+	IncrementLoginCount(ctx context.Context, tenantID string, userID uuid.UUID, date time.Time) error
+	IncrementErrorCount(ctx context.Context, tenantID string, userID uuid.UUID, date time.Time, count int) error
+
+	// Query operations
+	GetByTenantAndUser(ctx context.Context, tenantID string, userID uuid.UUID, filter *ActivityMetricsFilter) ([]*UserActivityMetrics, int64, error)
+	GetByTenantAndDateRange(ctx context.Context, tenantID string, startDate, endDate time.Time, filter *ActivityMetricsFilter) ([]*UserActivityMetrics, int64, error)
+	GetDailyMetrics(ctx context.Context, tenantID string, date time.Time, filter *ActivityMetricsFilter) ([]*UserActivityMetrics, error)
+	GetUserSummary(ctx context.Context, tenantID string, userID uuid.UUID, days int) (map[string]interface{}, error)
+
+	// Aggregation operations
+	GetActiveUsersCount(ctx context.Context, tenantID string, date time.Time) (int64, error)
+	GetTopUsers(ctx context.Context, tenantID string, startDate, endDate time.Time, limit int) ([]*UserActivityMetrics, error)
+	GetActivityTrends(ctx context.Context, tenantID string, startDate, endDate time.Time, groupBy string) ([]map[string]interface{}, error)
+	GetDeviceStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetGeographicStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+
+	// Cleanup operations
+	DeleteOldMetrics(ctx context.Context, before time.Time) (int64, error)
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+}
+
+// SystemUsageMetricsRepository defines the interface for system-level metrics
+type SystemUsageMetricsRepository interface {
+	// Basic CRUD operations
+	Create(ctx context.Context, metrics *SystemUsageMetrics) error
+	GetByID(ctx context.Context, id uuid.UUID) (*SystemUsageMetrics, error)
+	Update(ctx context.Context, metrics *SystemUsageMetrics) error
+	Delete(ctx context.Context, id uuid.UUID) error
+
+	// Metrics recording
+	RecordAPIUsage(ctx context.Context, tenantID string, date time.Time, hour int, calls, successes, errors int, avgResponseTime int) error
+	RecordStorageUsage(ctx context.Context, tenantID string, date time.Time, hour int, storageUsed, bandwidthUsed int64, filesUp, filesDown int) error
+	RecordDatabaseUsage(ctx context.Context, tenantID string, date time.Time, hour int, queries int, totalQueryTime int) error
+	RecordUserMetrics(ctx context.Context, tenantID string, date time.Time, hour int, activeUsers, newUsers, sessions, logins, loginSuccesses int) error
+	RecordPOSMetrics(ctx context.Context, tenantID string, date time.Time, hour int, orders int, revenue float64, payments int) error
+	RecordCustomMetric(ctx context.Context, tenantID string, date time.Time, hour int, metricType, metricName string, value float64, unit string, metadata map[string]interface{}) error
+
+	// Query operations
+	GetByTenantAndDateRange(ctx context.Context, tenantID string, startDate, endDate time.Time, filter *SystemMetricsFilter) ([]*SystemUsageMetrics, int64, error)
+	GetHourlyMetrics(ctx context.Context, tenantID string, date time.Time, filter *SystemMetricsFilter) ([]*SystemUsageMetrics, error)
+	GetDailyAggregates(ctx context.Context, tenantID string, startDate, endDate time.Time, metricTypes []string) ([]map[string]interface{}, error)
+	GetSystemOverview(ctx context.Context, tenantID string, days int) (map[string]interface{}, error)
+
+	// Aggregation operations
+	GetAPIUsageStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetStorageStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetUserActivityStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetPerformanceStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetTopMetrics(ctx context.Context, tenantID string, metricType string, startDate, endDate time.Time, limit int) ([]map[string]interface{}, error)
+
+	// Cross-tenant analytics (for system admins)
+	GetSystemWideStats(ctx context.Context, startDate, endDate time.Time) (map[string]interface{}, error)
+	GetTenantRankings(ctx context.Context, metricName string, startDate, endDate time.Time, limit int) ([]map[string]interface{}, error)
+
+	// Cleanup operations
+	DeleteOldMetrics(ctx context.Context, before time.Time) (int64, error)
+	DeleteByTenantID(ctx context.Context, tenantID string) error
+}
+
+// ReportExportRepository defines the interface for report export operations
+type ReportExportRepository interface {
+	// Basic CRUD operations
+	Create(ctx context.Context, export *ReportExport) error
+	GetByID(ctx context.Context, id uuid.UUID) (*ReportExport, error)
+	Update(ctx context.Context, export *ReportExport) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetByTenantID(ctx context.Context, tenantID string, limit, offset int) ([]*ReportExport, int64, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*ReportExport, error)
+
+	// Export lifecycle operations
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string, progress int, errorMessage string) error
+	UpdateProgress(ctx context.Context, id uuid.UUID, progress int, rowsProcessed, totalRows int) error
+	UpdateFileInfo(ctx context.Context, id uuid.UUID, filePath, fileURL string, fileSize int64) error
+	MarkStarted(ctx context.Context, id uuid.UUID) error
+	MarkCompleted(ctx context.Context, id uuid.UUID, filePath, fileURL string, fileSize int64) error
+	MarkFailed(ctx context.Context, id uuid.UUID, errorMessage string) error
+
+	// Download tracking
+	IncrementDownloadCount(ctx context.Context, id uuid.UUID) error
+	UpdateLastDownload(ctx context.Context, id uuid.UUID) error
+
+	// Queue operations
+	GetPendingExports(ctx context.Context, limit int) ([]*ReportExport, error)
+	GetProcessingExports(ctx context.Context) ([]*ReportExport, error)
+
+	// Cleanup operations
+	DeleteExpiredExports(ctx context.Context, before time.Time) (int64, error)
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+
+	// Statistics
+	GetExportStats(ctx context.Context, tenantID string, days int) (map[string]interface{}, error)
+}
+
+// ReportScheduleRepository defines the interface for scheduled report operations
+type ReportScheduleRepository interface {
+	// Basic CRUD operations
+	Create(ctx context.Context, schedule *ReportSchedule) error
+	GetByID(ctx context.Context, id uuid.UUID) (*ReportSchedule, error)
+	Update(ctx context.Context, schedule *ReportSchedule) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetByTenantID(ctx context.Context, tenantID string, limit, offset int) ([]*ReportSchedule, int64, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*ReportSchedule, error)
+
+	// Schedule management
+	GetDueSchedules(ctx context.Context, before time.Time) ([]*ReportSchedule, error)
+	UpdateLastRun(ctx context.Context, id uuid.UUID, lastRunAt time.Time, nextRunAt *time.Time) error
+	UpdateNextRun(ctx context.Context, id uuid.UUID, nextRunAt time.Time) error
+	IncrementRunCount(ctx context.Context, id uuid.UUID) error
+	IncrementErrorCount(ctx context.Context, id uuid.UUID, errorMessage string) error
+
+	// Status management
+	Activate(ctx context.Context, id uuid.UUID) error
+	Deactivate(ctx context.Context, id uuid.UUID) error
+	GetActiveSchedules(ctx context.Context, tenantID string) ([]*ReportSchedule, error)
+
+	// Cleanup operations
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+
+	// Statistics
+	GetScheduleStats(ctx context.Context, tenantID string) (map[string]interface{}, error)
+}
+
+// OrderRepository interface for order operations (POS module)
+type OrderRepository interface {
+	Create(ctx context.Context, order *Order) error
+	Update(ctx context.Context, order *Order) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Order, error)
+	GetByOrderNumber(ctx context.Context, tenantID string, orderNumber string) (*Order, error)
+	GetByTenantID(ctx context.Context, tenantID string, filter *OrderFilter) ([]*Order, int64, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID, filter *OrderFilter) ([]*Order, int64, error)
+	GetByStatus(ctx context.Context, tenantID string, status string, filter *OrderFilter) ([]*Order, int64, error)
+	GetByDateRange(ctx context.Context, tenantID string, startDate, endDate time.Time) ([]*Order, error)
+	UpdateStatus(ctx context.Context, orderID uuid.UUID, status string) error
+	UpdatePaymentStatus(ctx context.Context, orderID uuid.UUID, paymentStatus string) error
+	GetRecentOrders(ctx context.Context, tenantID string, limit int) ([]*Order, error)
+	GetOrderStats(ctx context.Context, tenantID string, startDate, endDate time.Time) (*OrderStats, error)
+	GenerateOrderNumber(ctx context.Context, tenantID string) (string, error)
+}
