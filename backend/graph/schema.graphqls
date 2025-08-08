@@ -2,6 +2,7 @@
 
 scalar Time
 scalar UUID
+scalar Upload
 
 type Tenant {
   id: UUID!
@@ -41,16 +42,76 @@ type TenantDomain {
 
 type User {
   id: UUID!
+  keycloakUserId: String
   email: String!
   username: String
   firstName: String
   lastName: String
+  phone: String
   avatar: String
+  avatarUrl: String
   status: String!
+  emailVerified: Boolean!
+  phoneVerified: Boolean!
+  lastLoginAt: Time
+  loginCount: Int!
+  preferences: String
+  metadata: String
   tenantUsers: [TenantUser!]!
   userRoles: [UserRole!]!
+  sessions: [UserSession!]!
   createdAt: Time!
   updatedAt: Time!
+}
+
+type UserSession {
+  id: UUID!
+  userId: UUID!
+  tenantId: UUID
+  sessionToken: String!
+  ipAddress: String
+  userAgent: String
+  expiresAt: Time!
+  lastAccessedAt: Time!
+  createdAt: Time!
+  updatedAt: Time!
+  user: User!
+  tenant: Tenant
+}
+
+type UserPreference {
+  id: UUID!
+  userId: UUID!
+  tenantId: UUID
+  category: String!
+  key: String!
+  value: String!
+  createdAt: Time!
+  updatedAt: Time!
+  user: User!
+  tenant: Tenant
+}
+
+type File {
+  id: UUID!
+  tenantId: UUID
+  userId: UUID!
+  fileName: String!
+  originalName: String!
+  mimeType: String!
+  size: Int!
+  path: String!
+  url: String!
+  storageType: String!
+  category: String
+  tags: [String!]!
+  isPublic: Boolean!
+  expiresAt: Time
+  metadata: String!
+  createdAt: Time!
+  updatedAt: Time!
+  user: User!
+  tenant: Tenant
 }
 
 type TenantUser {
@@ -185,8 +246,11 @@ input TenantBrandingInput {
 input CreateUserInput {
   email: String!
   username: String
-  firstName: String
-  lastName: String
+  firstName: String!
+  lastName: String!
+  phone: String
+  emailVerified: Boolean
+  phoneVerified: Boolean
 }
 
 input UpdateUserInput {
@@ -194,8 +258,63 @@ input UpdateUserInput {
   username: String
   firstName: String
   lastName: String
+  phone: String
   avatar: String
   status: String
+  emailVerified: Boolean
+  phoneVerified: Boolean
+  metadata: String
+}
+
+input UpdateProfileInput {
+  firstName: String
+  lastName: String
+  phone: String
+  bio: String
+  metadata: String
+}
+
+input CreateSystemAdminInput {
+  email: String!
+  username: String
+  firstName: String!
+  lastName: String!
+  phone: String
+}
+
+input CreateTenantAdminInput {
+  tenantId: UUID!
+  email: String!
+  username: String
+  firstName: String!
+  lastName: String!
+  phone: String
+}
+
+input UpdateUserPreferencesInput {
+  userId: UUID!
+  tenantId: UUID
+  preferences: String!
+}
+
+input SetUserPreferenceInput {
+  userId: UUID!
+  tenantId: UUID
+  category: String!
+  key: String!
+  value: String!
+}
+
+input AssignUserRoleInput {
+  userId: UUID!
+  tenantId: UUID!
+  roleId: UUID!
+}
+
+input UpdateUserRolesInput {
+  userId: UUID!
+  tenantId: UUID!
+  roleIds: [UUID!]!
 }
 
 input AddUserToTenantInput {
@@ -263,8 +382,30 @@ type Query {
   # User queries
   user(id: UUID!): User
   userByEmail(email: String!): User
+  userByKeycloakId(keycloakUserId: String!): User
   users(pagination: PaginationInput): UserConnection!
   usersByTenant(tenantId: UUID!, pagination: PaginationInput): UserConnection!
+  systemAdmins(pagination: PaginationInput): UserConnection!
+  tenantAdmins(tenantId: UUID!, pagination: PaginationInput): UserConnection!
+  searchUsers(query: String!, pagination: PaginationInput): UserConnection!
+  
+  # User profile queries
+  userProfile(userId: UUID!): User
+  
+  # User preferences queries
+  userPreferences(userId: UUID!, tenantId: UUID): [UserPreference!]!
+  userPreference(userId: UUID!, tenantId: UUID, category: String!, key: String!): String
+  
+  # User roles queries
+  userRoles(userId: UUID!, tenantId: UUID): [UserRole!]!
+  
+  # Session queries
+  userSessions(userId: UUID!): [UserSession!]!
+  activeUserSessions(userId: UUID!): [UserSession!]!
+  
+  # File queries
+  userFiles(userId: UUID!, category: String, pagination: PaginationInput): [File!]!
+  file(id: UUID!): File
   
   # Domain queries
   tenantDomains(tenantId: UUID!): [TenantDomain!]!
@@ -287,7 +428,7 @@ type Query {
   permissionsByResource(resource: String!): [Permission!]!
   
   userRole(id: UUID!): UserRole
-  userRoles(userId: UUID!): [UserRole!]!
+  allUserRoles(userId: UUID!): [UserRole!]!
   userRolesByTenant(tenantId: UUID!, pagination: PaginationInput): UserRoleConnection!
   userPermissions(userId: UUID!, tenantId: UUID!): [String!]!
   
@@ -306,6 +447,41 @@ type Mutation {
   createUser(input: CreateUserInput!): User!
   updateUser(input: UpdateUserInput!): User!
   deleteUser(id: UUID!): Boolean!
+  
+  # System Admin mutations
+  createSystemAdmin(input: CreateSystemAdminInput!): User!
+  updateSystemAdmin(input: UpdateUserInput!): User!
+  deleteSystemAdmin(id: UUID!): Boolean!
+  
+  # Tenant Admin mutations
+  createTenantAdmin(input: CreateTenantAdminInput!): User!
+  updateTenantAdmin(tenantId: UUID!, input: UpdateUserInput!): User!
+  deleteTenantAdmin(tenantId: UUID!, id: UUID!): Boolean!
+  
+  # Profile mutations
+  updateProfile(input: UpdateProfileInput!): User!
+  uploadAvatar(userId: UUID!, file: Upload!): User!
+  deleteAvatar(userId: UUID!): Boolean!
+  
+  # User preferences mutations
+  updateUserPreferences(input: UpdateUserPreferencesInput!): Boolean!
+  setUserPreference(input: SetUserPreferenceInput!): Boolean!
+  
+  # User status mutations
+  activateUser(userId: UUID!): User!
+  deactivateUser(userId: UUID!): User!
+  suspendUser(userId: UUID!): User!
+  verifyEmail(userId: UUID!): User!
+  verifyPhone(userId: UUID!): User!
+  
+  # User role mutations
+  assignUserRole(input: AssignUserRoleInput!): UserRole!
+  unassignUserRole(userId: UUID!, tenantId: UUID!, roleId: UUID!): Boolean!
+  updateUserRoles(input: UpdateUserRolesInput!): [UserRole!]!
+  
+  # Session mutations
+  revokeSession(sessionId: UUID!): Boolean!
+  revokeAllSessions(userId: UUID!): Boolean!
   
   # Tenant-User relationship mutations
   addUserToTenant(input: AddUserToTenantInput!): TenantUser!

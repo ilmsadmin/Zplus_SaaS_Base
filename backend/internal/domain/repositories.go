@@ -9,6 +9,7 @@ import (
 
 // TenantRepository defines the interface for tenant data operations
 type TenantRepository interface {
+	// Basic CRUD operations
 	Create(ctx context.Context, tenant *Tenant) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Tenant, error)
 	GetBySubdomain(ctx context.Context, subdomain string) (*Tenant, error)
@@ -16,19 +17,122 @@ type TenantRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, limit, offset int) ([]*Tenant, error)
 	Count(ctx context.Context) (int64, error)
+
+	// Advanced tenant operations
+	GetByDomain(ctx context.Context, domain string) (*Tenant, error)
+	SearchTenants(ctx context.Context, query string, limit, offset int) ([]*Tenant, error)
+	ListByStatus(ctx context.Context, status string, limit, offset int) ([]*Tenant, error)
+	ListByPlan(ctx context.Context, plan string, limit, offset int) ([]*Tenant, error)
+
+	// Onboarding operations
+	UpdateOnboardingStatus(ctx context.Context, tenantID uuid.UUID, status string, step int) error
+	UpdateOnboardingData(ctx context.Context, tenantID uuid.UUID, data map[string]interface{}) error
+	GetTenantsByOnboardingStatus(ctx context.Context, status string, limit, offset int) ([]*Tenant, error)
+
+	// Configuration management
+	UpdateSettings(ctx context.Context, tenantID uuid.UUID, settings *TenantSettings) error
+	UpdateConfiguration(ctx context.Context, tenantID uuid.UUID, config *TenantConfiguration) error
+	UpdateBranding(ctx context.Context, tenantID uuid.UUID, branding *TenantBranding) error
+	UpdateBilling(ctx context.Context, tenantID uuid.UUID, billing *TenantBilling) error
+
+	// Tenant lifecycle
+	ActivateTenant(ctx context.Context, tenantID uuid.UUID) error
+	SuspendTenant(ctx context.Context, tenantID uuid.UUID) error
+	CancelTenant(ctx context.Context, tenantID uuid.UUID) error
+
+	// Subdomain management
+	IsSubdomainAvailable(ctx context.Context, subdomain string) (bool, error)
+	ReserveSubdomain(ctx context.Context, subdomain string, tenantID uuid.UUID) error
+	ReleaseSubdomain(ctx context.Context, subdomain string) error
+
+	// Metrics and analytics
+	GetTenantMetrics(ctx context.Context, tenantID uuid.UUID, metricType string, from, to time.Time) ([]*TenantUsageMetrics, error)
+	RecordUsageMetric(ctx context.Context, metric *TenantUsageMetrics) error
+	GetTenantStats(ctx context.Context, tenantID uuid.UUID) (map[string]interface{}, error)
+}
+
+// TenantOnboardingRepository defines operations for tenant onboarding tracking
+type TenantOnboardingRepository interface {
+	Create(ctx context.Context, log *TenantOnboardingLog) error
+	GetByID(ctx context.Context, id uuid.UUID) (*TenantOnboardingLog, error)
+	Update(ctx context.Context, log *TenantOnboardingLog) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*TenantOnboardingLog, error)
+	GetByTenantAndStep(ctx context.Context, tenantID uuid.UUID, step int) (*TenantOnboardingLog, error)
+	UpdateStepStatus(ctx context.Context, tenantID uuid.UUID, step int, status string, data map[string]interface{}) error
+	GetCurrentStep(ctx context.Context, tenantID uuid.UUID) (*TenantOnboardingLog, error)
+	CompleteStep(ctx context.Context, tenantID uuid.UUID, step int, data map[string]interface{}) error
+}
+
+// TenantInvitationRepository defines operations for tenant invitations
+type TenantInvitationRepository interface {
+	Create(ctx context.Context, invitation *TenantInvitation) error
+	GetByID(ctx context.Context, id uuid.UUID) (*TenantInvitation, error)
+	GetByToken(ctx context.Context, token string) (*TenantInvitation, error)
+	Update(ctx context.Context, invitation *TenantInvitation) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*TenantInvitation, error)
+	ListByEmail(ctx context.Context, email string) ([]*TenantInvitation, error)
+	AcceptInvitation(ctx context.Context, token string, userID uuid.UUID) error
+	RevokeInvitation(ctx context.Context, id uuid.UUID) error
+	CleanupExpiredInvitations(ctx context.Context) error
+}
+
+// TenantUsageRepository defines operations for tenant usage tracking
+type TenantUsageRepository interface {
+	Create(ctx context.Context, metric *TenantUsageMetrics) error
+	GetByID(ctx context.Context, id uuid.UUID) (*TenantUsageMetrics, error)
+	Update(ctx context.Context, metric *TenantUsageMetrics) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*TenantUsageMetrics, error)
+	GetMetricsByType(ctx context.Context, tenantID uuid.UUID, metricType string, from, to time.Time) ([]*TenantUsageMetrics, error)
+	GetLatestMetric(ctx context.Context, tenantID uuid.UUID, metricType string) (*TenantUsageMetrics, error)
+	RecordMetric(ctx context.Context, tenantID uuid.UUID, metricType string, value float64, unit string, additionalData map[string]interface{}) error
+	AggregateMetrics(ctx context.Context, tenantID uuid.UUID, metricType string, from, to time.Time, aggregationType string) (float64, error)
 }
 
 // UserRepository defines the interface for user data operations
 type UserRepository interface {
+	// Basic CRUD operations
 	Create(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
+	GetByKeycloakUserID(ctx context.Context, keycloakUserID string) (*User, error)
 	Update(ctx context.Context, user *User) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	SoftDelete(ctx context.Context, id uuid.UUID) error
+
+	// List operations
 	List(ctx context.Context, limit, offset int) ([]*User, error)
 	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*User, error)
+	ListByRole(ctx context.Context, role string, limit, offset int) ([]*User, error)
+	ListSystemAdmins(ctx context.Context, limit, offset int) ([]*User, error)
+	ListTenantAdmins(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*User, error)
+
+	// Search operations
+	Search(ctx context.Context, query string, limit, offset int) ([]*User, error)
+	SearchByTenant(ctx context.Context, tenantID uuid.UUID, query string, limit, offset int) ([]*User, error)
+
+	// Count operations
 	Count(ctx context.Context) (int64, error)
+	CountByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountByRole(ctx context.Context, role string) (int64, error)
+
+	// Profile operations
+	UpdateProfile(ctx context.Context, userID uuid.UUID, profile map[string]interface{}) error
+	UpdateAvatar(ctx context.Context, userID uuid.UUID, avatarURL string) error
+	UpdatePreferences(ctx context.Context, userID uuid.UUID, preferences map[string]interface{}) error
+
+	// Session operations
+	UpdateLastLogin(ctx context.Context, userID uuid.UUID) error
+	IncrementLoginCount(ctx context.Context, userID uuid.UUID) error
+
+	// Status operations
+	UpdateStatus(ctx context.Context, userID uuid.UUID, status string) error
+	ActivateUser(ctx context.Context, userID uuid.UUID) error
+	DeactivateUser(ctx context.Context, userID uuid.UUID) error
+	SuspendUser(ctx context.Context, userID uuid.UUID) error
 }
 
 // TenantUserRepository defines the interface for tenant-user relationship operations
@@ -90,6 +194,85 @@ type DomainRoutingCacheRepository interface {
 	RefreshCache(ctx context.Context, domain string) error
 }
 
+// DomainRegistrationRepository defines the interface for domain registration operations
+type DomainRegistrationRepository interface {
+	Create(ctx context.Context, registration *DomainRegistration) error
+	GetByID(ctx context.Context, id uuid.UUID) (*DomainRegistration, error)
+	GetByDomainID(ctx context.Context, domainID uuid.UUID) (*DomainRegistration, error)
+	Update(ctx context.Context, registration *DomainRegistration) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByStatus(ctx context.Context, status string, limit, offset int) ([]*DomainRegistration, error)
+	ListExpiring(ctx context.Context, days int) ([]*DomainRegistration, error)
+	ListByProvider(ctx context.Context, provider string) ([]*DomainRegistration, error)
+	GetRegistrationStats(ctx context.Context) (map[string]interface{}, error)
+}
+
+// DomainRegistrationEventRepository defines the interface for domain registration event operations
+type DomainRegistrationEventRepository interface {
+	Create(ctx context.Context, event *DomainRegistrationEvent) error
+	GetByID(ctx context.Context, id uuid.UUID) (*DomainRegistrationEvent, error)
+	ListByRegistrationID(ctx context.Context, registrationID uuid.UUID) ([]*DomainRegistrationEvent, error)
+	ListByEventType(ctx context.Context, eventType string, limit, offset int) ([]*DomainRegistrationEvent, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// DNSRecordRepository defines the interface for DNS record operations
+type DNSRecordRepository interface {
+	Create(ctx context.Context, record *DNSRecord) error
+	GetByID(ctx context.Context, id uuid.UUID) (*DNSRecord, error)
+	Update(ctx context.Context, record *DNSRecord) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByDomainID(ctx context.Context, domainID uuid.UUID) ([]*DNSRecord, error)
+	ListByType(ctx context.Context, domainID uuid.UUID, recordType string) ([]*DNSRecord, error)
+	ListByPurpose(ctx context.Context, domainID uuid.UUID, purpose string) ([]*DNSRecord, error)
+	FindByNameAndType(ctx context.Context, domainID uuid.UUID, name, recordType string) (*DNSRecord, error)
+	ListManagedRecords(ctx context.Context, domainID uuid.UUID) ([]*DNSRecord, error)
+	BulkCreate(ctx context.Context, records []*DNSRecord) error
+	BulkUpdate(ctx context.Context, records []*DNSRecord) error
+	BulkDelete(ctx context.Context, recordIDs []uuid.UUID) error
+}
+
+// DomainOwnershipVerificationRepository defines the interface for domain ownership verification operations
+type DomainOwnershipVerificationRepository interface {
+	Create(ctx context.Context, verification *DomainOwnershipVerification) error
+	GetByID(ctx context.Context, id uuid.UUID) (*DomainOwnershipVerification, error)
+	GetByDomainID(ctx context.Context, domainID uuid.UUID) ([]*DomainOwnershipVerification, error)
+	GetActiveByDomainID(ctx context.Context, domainID uuid.UUID) (*DomainOwnershipVerification, error)
+	Update(ctx context.Context, verification *DomainOwnershipVerification) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByStatus(ctx context.Context, status string, limit, offset int) ([]*DomainOwnershipVerification, error)
+	ListPendingVerifications(ctx context.Context) ([]*DomainOwnershipVerification, error)
+	ListReadyForRetry(ctx context.Context) ([]*DomainOwnershipVerification, error)
+	ListExpiring(ctx context.Context, hours int) ([]*DomainOwnershipVerification, error)
+}
+
+// SSLCertificateRequestRepository defines the interface for SSL certificate request operations
+type SSLCertificateRequestRepository interface {
+	Create(ctx context.Context, request *SSLCertificateRequest) error
+	GetByID(ctx context.Context, id uuid.UUID) (*SSLCertificateRequest, error)
+	GetByDomainID(ctx context.Context, domainID uuid.UUID) ([]*SSLCertificateRequest, error)
+	GetActiveByDomainID(ctx context.Context, domainID uuid.UUID) (*SSLCertificateRequest, error)
+	Update(ctx context.Context, request *SSLCertificateRequest) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByStatus(ctx context.Context, status string, limit, offset int) ([]*SSLCertificateRequest, error)
+	ListPendingRequests(ctx context.Context) ([]*SSLCertificateRequest, error)
+	ListExpiredRequests(ctx context.Context) ([]*SSLCertificateRequest, error)
+	ListFailedRequests(ctx context.Context, maxAttempts int) ([]*SSLCertificateRequest, error)
+}
+
+// DomainHealthCheckRepository defines the interface for domain health check operations
+type DomainHealthCheckRepository interface {
+	Create(ctx context.Context, healthCheck *DomainHealthCheck) error
+	GetByID(ctx context.Context, id uuid.UUID) (*DomainHealthCheck, error)
+	GetByDomainID(ctx context.Context, domainID uuid.UUID) ([]*DomainHealthCheck, error)
+	Update(ctx context.Context, healthCheck *DomainHealthCheck) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByStatus(ctx context.Context, status string) ([]*DomainHealthCheck, error)
+	ListByCheckType(ctx context.Context, checkType string) ([]*DomainHealthCheck, error)
+	ListReadyForCheck(ctx context.Context) ([]*DomainHealthCheck, error)
+	GetHealthStats(ctx context.Context, domainID uuid.UUID, hours int) (map[string]interface{}, error)
+}
+
 // APIKeyRepository defines the interface for API key operations
 type APIKeyRepository interface {
 	Create(ctx context.Context, apiKey *APIKey) error
@@ -110,6 +293,140 @@ type AuditLogRepository interface {
 	ListByResource(ctx context.Context, tenantID uuid.UUID, resource string, limit, offset int) ([]*AuditLog, error)
 	CountByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	DeleteOldLogs(ctx context.Context, beforeDate time.Time) error
+}
+
+// UserSessionRepository defines the interface for user session operations
+type UserSessionRepository interface {
+	Create(ctx context.Context, session *UserSession) error
+	GetByID(ctx context.Context, id uuid.UUID) (*UserSession, error)
+	GetByToken(ctx context.Context, token string) (*UserSession, error)
+	Update(ctx context.Context, session *UserSession) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
+	DeleteExpired(ctx context.Context) error
+	ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*UserSession, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*UserSession, error)
+	CountActiveByUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	UpdateLastAccessed(ctx context.Context, token string) error
+}
+
+// UserPreferenceRepository defines the interface for user preference operations
+type UserPreferenceRepository interface {
+	Create(ctx context.Context, preference *UserPreference) error
+	GetByID(ctx context.Context, id uuid.UUID) (*UserPreference, error)
+	GetByUserAndKey(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID, category, key string) (*UserPreference, error)
+	Update(ctx context.Context, preference *UserPreference) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	UpsertPreference(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID, category, key string, value interface{}) error
+	ListByUser(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID) ([]*UserPreference, error)
+	ListByCategory(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID, category string) ([]*UserPreference, error)
+	DeleteByUser(ctx context.Context, userID uuid.UUID) error
+	GetUserPreferences(ctx context.Context, userID uuid.UUID, tenantID *uuid.UUID) (map[string]interface{}, error)
+}
+
+// FileStorageConfigRepository defines the interface for file storage configuration operations
+type FileStorageConfigRepository interface {
+	Create(ctx context.Context, config *FileStorageConfig) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileStorageConfig, error)
+	GetByTenantAndType(ctx context.Context, tenantID uuid.UUID, storageType string) (*FileStorageConfig, error)
+	GetActiveByTenant(ctx context.Context, tenantID uuid.UUID) (*FileStorageConfig, error)
+	Update(ctx context.Context, config *FileStorageConfig) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*FileStorageConfig, error)
+	SetActive(ctx context.Context, id uuid.UUID, tenantID uuid.UUID) error
+}
+
+// FileRepository defines the interface for file operations
+type FileRepository interface {
+	Create(ctx context.Context, file *File) error
+	GetByID(ctx context.Context, id uuid.UUID) (*File, error)
+	GetByPath(ctx context.Context, path string) (*File, error)
+	GetByChecksum(ctx context.Context, checksum string) (*File, error)
+	Update(ctx context.Context, file *File) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	SoftDelete(ctx context.Context, id uuid.UUID) error
+	ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*File, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*File, error)
+	ListByCategory(ctx context.Context, category string, limit, offset int) ([]*File, error)
+	ListByUserAndCategory(ctx context.Context, userID uuid.UUID, category string, limit, offset int) ([]*File, error)
+	ListByTags(ctx context.Context, tags []string, limit, offset int) ([]*File, error)
+	ListPublic(ctx context.Context, limit, offset int) ([]*File, error)
+	ListPendingProcessing(ctx context.Context, limit, offset int) ([]*File, error)
+	ListPendingVirusScan(ctx context.Context, limit, offset int) ([]*File, error)
+	CountByUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	GetTotalSizeByUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	GetTotalSizeByTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	DeleteExpired(ctx context.Context) error
+	Search(ctx context.Context, query string, tenantID *uuid.UUID, limit, offset int) ([]*File, error)
+	UpdateProcessingStatus(ctx context.Context, id uuid.UUID, status string) error
+	UpdateVirusScanStatus(ctx context.Context, id uuid.UUID, status string, result map[string]interface{}) error
+}
+
+// FileVersionRepository defines the interface for file version operations
+type FileVersionRepository interface {
+	Create(ctx context.Context, version *FileVersion) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileVersion, error)
+	GetByFileID(ctx context.Context, fileID uuid.UUID) ([]*FileVersion, error)
+	GetLatestByFileID(ctx context.Context, fileID uuid.UUID) (*FileVersion, error)
+	GetByFileAndVersion(ctx context.Context, fileID uuid.UUID, versionNumber int) (*FileVersion, error)
+	Update(ctx context.Context, version *FileVersion) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteByFileID(ctx context.Context, fileID uuid.UUID) error
+	CountByFileID(ctx context.Context, fileID uuid.UUID) (int64, error)
+}
+
+// FileShareRepository defines the interface for file sharing operations
+type FileShareRepository interface {
+	Create(ctx context.Context, share *FileShare) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileShare, error)
+	GetByAccessToken(ctx context.Context, token string) (*FileShare, error)
+	GetByFileID(ctx context.Context, fileID uuid.UUID) ([]*FileShare, error)
+	GetBySharedBy(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*FileShare, error)
+	GetBySharedWith(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*FileShare, error)
+	Update(ctx context.Context, share *FileShare) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	DeleteByFileID(ctx context.Context, fileID uuid.UUID) error
+	IncrementDownloadCount(ctx context.Context, id uuid.UUID) error
+	DeactivateExpired(ctx context.Context) error
+	ValidateAccess(ctx context.Context, token string, password *string) (*FileShare, error)
+}
+
+// FileUploadSessionRepository defines the interface for upload session operations
+type FileUploadSessionRepository interface {
+	Create(ctx context.Context, session *FileUploadSession) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileUploadSession, error)
+	GetByToken(ctx context.Context, token string) (*FileUploadSession, error)
+	GetByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*FileUploadSession, error)
+	Update(ctx context.Context, session *FileUploadSession) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	UpdateProgress(ctx context.Context, id uuid.UUID, uploadedChunks int) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
+	DeleteExpired(ctx context.Context) error
+	CleanupCompleted(ctx context.Context, olderThan time.Time) error
+}
+
+// FileProcessingJobRepository interface for file processing job operations
+type FileProcessingJobRepository interface {
+	Create(ctx context.Context, job *FileProcessingJob) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileProcessingJob, error)
+	Update(ctx context.Context, job *FileProcessingJob) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	FindByFileID(ctx context.Context, fileID uuid.UUID) ([]*FileProcessingJob, error)
+	FindByStatus(ctx context.Context, status string) ([]*FileProcessingJob, error)
+	FindByJobType(ctx context.Context, jobType string) ([]*FileProcessingJob, error)
+	FindByDateRange(ctx context.Context, start, end time.Time) ([]*FileProcessingJob, error)
+	FindFailedJobs(ctx context.Context) ([]*FileProcessingJob, error)
+	CleanupOldJobs(ctx context.Context, olderThan time.Time) error
+} // FileAccessLogRepository defines the interface for file access logging operations
+type FileAccessLogRepository interface {
+	Create(ctx context.Context, log *FileAccessLog) error
+	GetByID(ctx context.Context, id uuid.UUID) (*FileAccessLog, error)
+	GetByFileID(ctx context.Context, fileID uuid.UUID, limit, offset int) ([]*FileAccessLog, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*FileAccessLog, error)
+	GetByAction(ctx context.Context, action string, limit, offset int) ([]*FileAccessLog, error)
+	GetActivitySummary(ctx context.Context, fileID uuid.UUID, since time.Time) (map[string]int, error)
+	CleanupOldLogs(ctx context.Context, olderThan time.Time) error
 }
 
 // RoleRepository defines the interface for role operations
@@ -142,9 +459,11 @@ type UserRoleRepository interface {
 	Create(ctx context.Context, userRole *UserRole) error
 	GetByID(ctx context.Context, id uuid.UUID) (*UserRole, error)
 	GetByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]*UserRole, error)
+	GetByUserTenantRole(ctx context.Context, userID, tenantID, roleID uuid.UUID) (*UserRole, error)
 	Update(ctx context.Context, userRole *UserRole) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	DeleteByUserAndRole(ctx context.Context, userID, roleID, tenantID uuid.UUID) error
+	DeleteByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) error
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]*UserRole, error)
 	ListByRole(ctx context.Context, roleID uuid.UUID, limit, offset int) ([]*UserRole, error)
 	ListByTenant(ctx context.Context, tenantID uuid.UUID, limit, offset int) ([]*UserRole, error)

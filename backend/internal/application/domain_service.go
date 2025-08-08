@@ -220,15 +220,9 @@ func (s *DomainService) AddCustomDomain(ctx context.Context, req *AddCustomDomai
 		s.logger.Error("Failed to create validation log", zap.Error(err))
 	}
 
-	// Parse tenant ID as UUID
-	tenantUUID, err := uuid.Parse(req.TenantID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid tenant ID format: %w", err)
-	}
-
 	// Create audit log
 	auditLog := &domain.AuditLog{
-		TenantID: tenantUUID,
+		TenantID: req.TenantID,
 		Action:   domain.ActionCreate,
 		Resource: "custom_domain",
 		Details: &domain.Details{
