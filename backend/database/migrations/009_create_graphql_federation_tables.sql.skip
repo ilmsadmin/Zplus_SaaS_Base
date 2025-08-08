@@ -1,0 +1,165 @@
+-- GraphQL Federation Schema Registry Tables
+-- Migration: 009_create_graphql_federation_tables.sql
+
+-- Schema Registry Table
+CREATE TABLE IF NOT EXISTS graphql_schemas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_name VARCHAR(100) NOT NULL,
+    service_version VARCHAR(50) NOT NULL,
+    schema_sdl TEXT NOT NULL,
+    schema_hash VARCHAR(64) NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    is_valid BOOLEAN DEFAULT true,
+    validation_errors JSONB DEFAULT '[]',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(service_name, service_version)
+);
+
+-- Create indexes for graphql_schemas
+CREATE INDEX IF NOT EXISTS idx_graphql_schemas_service_active ON graphql_schemas(service_name, is_active);
+CREATE INDEX IF NOT EXISTS idx_graphql_schemas_hash ON graphql_schemas(schema_hash);
+CREATE INDEX IF NOT EXISTS idx_graphql_schemas_created ON graphql_schemas(created_at);
+
+-- Service Discovery Table
+CREATE TABLE IF NOT EXISTS federation_services (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_name VARCHAR(100) UNIQUE NOT NULL,
+    service_url VARCHAR(500) NOT NULL,
+    health_check_url VARCHAR(500),
+    schema_id UUID REFERENCES graphql_schemas(id),
+    status VARCHAR(20) DEFAULT 'healthy', -- healthy, unhealthy, unknown
+    last_health_check TIMESTAMP,
+    metadata JSONB DEFAULT '{}',
+    tags VARCHAR(255)[] DEFAULT '{}',
+    weight INTEGER DEFAULT 100,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX(service_name),
+    INDEX(status),
+    INDEX(last_health_check),
+    CHECK (status IN ('healthy', 'unhealthy', 'unknown', 'maintenance'))
+);
+
+-- Federated Schema Compositions
+CREATE TABLE IF NOT EXISTS federation_compositions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    composition_name VARCHAR(100) NOT NULL,
+    composition_version VARCHAR(50) NOT NULL,
+    composed_schema TEXT NOT NULL,
+    service_schemas JSONB NOT NULL, -- Array of {service_name, schema_id, version}
+    composition_status VARCHAR(20) DEFAULT 'active',
+    validation_result JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deployed_at TIMESTAMP,
+    
+    UNIQUE(composition_name, composition_version),
+    INDEX(composition_name, composition_status),
+    INDEX(created_at),
+    CHECK (composition_status IN ('active', 'inactive', 'deprecated', 'failed'))
+);
+
+-- GraphQL Query Metrics
+CREATE TABLE IF NOT EXISTS graphql_query_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID,
+    query_hash VARCHAR(64) NOT NULL,
+    query_name VARCHAR(200),
+    operation_type VARCHAR(20) NOT NULL, -- query, mutation, subscription
+    execution_time_ms INTEGER NOT NULL,
+    complexity_score INTEGER,
+    depth_score INTEGER,
+    field_count INTEGER,
+    service_calls JSONB DEFAULT '[]', -- Array of service call details
+    error_count INTEGER DEFAULT 0,
+    cache_hit BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX(tenant_id, created_at),
+    INDEX(query_hash),
+    INDEX(execution_time_ms),
+    INDEX(complexity_score),
+    CHECK (operation_type IN ('query', 'mutation', 'subscription'))
+);
+
+-- Schema Change Events
+CREATE TABLE IF NOT EXISTS schema_change_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    service_name VARCHAR(100) NOT NULL,
+    change_type VARCHAR(50) NOT NULL, -- schema_updated, service_registered, service_deregistered
+    old_schema_id UUID REFERENCES graphql_schemas(id),
+    new_schema_id UUID REFERENCES graphql_schemas(id),
+    change_details JSONB DEFAULT '{}',
+    breaking_changes JSONB DEFAULT '[]',
+    impact_analysis JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP,
+    
+    INDEX(service_name, created_at),
+    INDEX(change_type),
+    INDEX(created_at)
+);
+
+-- Federation Gateway Config
+CREATE TABLE IF NOT EXISTS federation_gateway_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    config_name VARCHAR(100) UNIQUE NOT NULL,
+    gateway_config JSONB NOT NULL,
+    is_active BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activated_at TIMESTAMP,
+    
+    INDEX(config_name, is_active)
+);
+
+-- Create updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Add updated_at triggers
+CREATE TRIGGER update_graphql_schemas_updated_at 
+    BEFORE UPDATE ON graphql_schemas 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_federation_services_updated_at 
+    BEFORE UPDATE ON federation_services 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert default federation gateway config
+INSERT INTO federation_gateway_config (config_name, gateway_config, is_active) VALUES 
+('default', '{
+    "introspection": true,
+    "playground": true,
+    "cors": {
+        "origin": ["http://localhost:3000", "https://*.zplus.io"],
+        "credentials": true
+    },
+    "rateLimiting": {
+        "max": 1000,
+        "windowMs": 900000
+    },
+    "queryComplexity": {
+        "maximumComplexity": 1000,
+        "maximumDepth": 15
+    },
+    "caching": {
+        "enabled": true,
+        "defaultTtl": 300
+    }
+}', true);
+
+-- Add comments
+COMMENT ON TABLE graphql_schemas IS 'Stores GraphQL schema definitions for federation services';
+COMMENT ON TABLE federation_services IS 'Service registry for GraphQL federation services';
+COMMENT ON TABLE federation_compositions IS 'Federated schema compositions and versions';
+COMMENT ON TABLE graphql_query_metrics IS 'GraphQL query performance and usage metrics';
+COMMENT ON TABLE schema_change_events IS 'Audit log for schema changes and their impact';
+COMMENT ON TABLE federation_gateway_config IS 'Configuration for the federation gateway';

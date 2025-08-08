@@ -1,0 +1,180 @@
+-- Migration: 011_enhance_tenants_for_management_system.sql
+-- Created: 2025-01-08
+-- Description: Enhance tenants table for comprehensive tenant management system
+
+BEGIN;
+
+-- First, update the tenants table structure to match our domain model
+-- Add new columns for comprehensive tenant management
+
+-- Change id to UUID type
+ALTER TABLE tenants 
+ALTER COLUMN id TYPE UUID USING id::UUID,
+ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+-- Add subdomain field
+ALTER TABLE tenants 
+ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100) UNIQUE;
+
+-- Update existing records to have subdomains based on slug
+UPDATE tenants SET subdomain = slug WHERE subdomain IS NULL;
+
+-- Make subdomain NOT NULL after populating
+ALTER TABLE tenants 
+ALTER COLUMN subdomain SET NOT NULL;
+
+-- Add comprehensive tenant management fields
+ALTER TABLE tenants 
+ADD COLUMN IF NOT EXISTS onboarding_status VARCHAR(20) DEFAULT 'pending' CHECK (onboarding_status IN ('pending', 'in_progress', 'completed', 'skipped')),
+ADD COLUMN IF NOT EXISTS onboarding_step INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS onboarding_data JSONB DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS contact_email VARCHAR(255),
+ADD COLUMN IF NOT EXISTS contact_name VARCHAR(255),
+ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50),
+ADD COLUMN IF NOT EXISTS company_size VARCHAR(50),
+ADD COLUMN IF NOT EXISTS industry VARCHAR(100),
+ADD COLUMN IF NOT EXISTS region VARCHAR(50) DEFAULT 'us-west-1',
+ADD COLUMN IF NOT EXISTS timezone VARCHAR(100) DEFAULT 'UTC',
+ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'en',
+ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD',
+ADD COLUMN IF NOT EXISTS trial_starts_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS subscription_id VARCHAR(100),
+ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(20) DEFAULT 'trial' CHECK (subscription_status IN ('trial', 'active', 'past_due', 'cancelled', 'unpaid')),
+ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP;
+
+-- Update features column to be array instead of JSONB
+ALTER TABLE tenants 
+ADD COLUMN IF NOT EXISTS features_array TEXT[];
+
+-- Migrate existing features JSONB to features_array
+UPDATE tenants 
+SET features_array = ARRAY['core', 'users'] 
+WHERE features_array IS NULL;
+
+-- Remove old features column after migration
+-- ALTER TABLE tenants DROP COLUMN IF EXISTS features;
+
+-- Rename features_array to features
+-- ALTER TABLE tenants RENAME COLUMN features_array TO features;
+
+-- Add integrations column as JSONB
+ALTER TABLE tenants 
+ADD COLUMN IF NOT EXISTS integrations JSONB DEFAULT '{}';
+
+-- Update plan field to support more plans
+ALTER TABLE tenants 
+DROP CONSTRAINT IF EXISTS tenants_plan_check;
+
+ALTER TABLE tenants 
+ADD CONSTRAINT tenants_plan_check 
+CHECK (plan IN ('free', 'starter', 'professional', 'enterprise'));
+
+-- Update status field to support more statuses
+ALTER TABLE tenants 
+DROP CONSTRAINT IF EXISTS tenants_status_check;
+
+ALTER TABLE tenants 
+ADD CONSTRAINT tenants_status_check 
+CHECK (status IN ('pending', 'active', 'suspended', 'cancelled', 'inactive'));
+
+-- Create tenant_onboarding_logs table
+CREATE TABLE IF NOT EXISTS tenant_onboarding_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    step INTEGER NOT NULL,
+    step_name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped', 'failed')),
+    data JSONB DEFAULT '{}',
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tenant_id, step)
+);
+
+-- Create tenant_invitations table
+CREATE TABLE IF NOT EXISTS tenant_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'user',
+    invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    token VARCHAR(128) NOT NULL UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+    expires_at TIMESTAMP NOT NULL,
+    accepted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    accepted_at TIMESTAMP,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create tenant_usage_metrics table
+CREATE TABLE IF NOT EXISTS tenant_usage_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    metric_type VARCHAR(100) NOT NULL,
+    value DECIMAL(15,4) NOT NULL,
+    unit VARCHAR(50) NOT NULL,
+    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    additional_data JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_tenant_onboarding_logs_tenant_id ON tenant_onboarding_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_onboarding_logs_step ON tenant_onboarding_logs(step);
+CREATE INDEX IF NOT EXISTS idx_tenant_onboarding_logs_status ON tenant_onboarding_logs(status);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_invitations_tenant_id ON tenant_invitations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_invitations_email ON tenant_invitations(email);
+CREATE INDEX IF NOT EXISTS idx_tenant_invitations_token ON tenant_invitations(token);
+CREATE INDEX IF NOT EXISTS idx_tenant_invitations_status ON tenant_invitations(status);
+CREATE INDEX IF NOT EXISTS idx_tenant_invitations_expires_at ON tenant_invitations(expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_metrics_tenant_id ON tenant_usage_metrics(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_metrics_type ON tenant_usage_metrics(metric_type);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_metrics_recorded_at ON tenant_usage_metrics(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_tenant_usage_metrics_tenant_type ON tenant_usage_metrics(tenant_id, metric_type);
+
+-- Create additional indexes for enhanced tenants table
+CREATE INDEX IF NOT EXISTS idx_tenants_subdomain ON tenants(subdomain);
+CREATE INDEX IF NOT EXISTS idx_tenants_onboarding_status ON tenants(onboarding_status);
+CREATE INDEX IF NOT EXISTS idx_tenants_subscription_status ON tenants(subscription_status);
+CREATE INDEX IF NOT EXISTS idx_tenants_contact_email ON tenants(contact_email);
+CREATE INDEX IF NOT EXISTS idx_tenants_industry ON tenants(industry);
+CREATE INDEX IF NOT EXISTS idx_tenants_region ON tenants(region);
+CREATE INDEX IF NOT EXISTS idx_tenants_last_activity_at ON tenants(last_activity_at);
+CREATE INDEX IF NOT EXISTS idx_tenants_trial_ends_at ON tenants(trial_ends_at);
+
+-- Create triggers for updated_at columns
+CREATE TRIGGER update_tenant_onboarding_logs_updated_at 
+    BEFORE UPDATE ON tenant_onboarding_logs 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tenant_invitations_updated_at 
+    BEFORE UPDATE ON tenant_invitations 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Add some sample onboarding steps for new tenants
+INSERT INTO tenant_onboarding_logs (tenant_id, step, step_name, status)
+SELECT 
+    id as tenant_id,
+    generate_series(1, 5) as step,
+    CASE generate_series(1, 5)
+        WHEN 1 THEN 'Welcome'
+        WHEN 2 THEN 'Setup Profile'
+        WHEN 3 THEN 'Configure Settings'
+        WHEN 4 THEN 'Add Team Members'
+        WHEN 5 THEN 'Complete Setup'
+    END as step_name,
+    'pending' as status
+FROM tenants
+WHERE NOT EXISTS (
+    SELECT 1 FROM tenant_onboarding_logs 
+    WHERE tenant_onboarding_logs.tenant_id = tenants.id
+);
+
+COMMIT;

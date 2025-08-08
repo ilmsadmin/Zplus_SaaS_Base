@@ -28,6 +28,7 @@
       "@/utils/*": ["./src/utils/*"],
       "@/graphql/*": ["./src/graphql/*"],
       "@/context/*": ["./src/context/*"],
+      "@/contexts/*": ["./src/contexts/*"],
       "@/store/*": ["./src/store/*"]
     },
     "target": "ES2017",

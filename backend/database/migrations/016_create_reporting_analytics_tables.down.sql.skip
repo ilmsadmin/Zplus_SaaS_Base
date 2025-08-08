@@ -1,0 +1,24 @@
+-- Rollback migration for Reporting & Analytics tables
+
+-- Drop foreign key constraints first
+ALTER TABLE report_schedules DROP CONSTRAINT IF EXISTS fk_report_schedules_user;
+ALTER TABLE report_exports DROP CONSTRAINT IF EXISTS fk_report_exports_report;
+ALTER TABLE report_exports DROP CONSTRAINT IF EXISTS fk_report_exports_user;
+ALTER TABLE user_activity_metrics DROP CONSTRAINT IF EXISTS fk_user_activity_user;
+ALTER TABLE analytics_reports DROP CONSTRAINT IF EXISTS fk_analytics_reports_user;
+
+-- Drop triggers
+DROP TRIGGER IF EXISTS update_report_schedules_updated_at ON report_schedules;
+DROP TRIGGER IF EXISTS update_report_exports_updated_at ON report_exports;
+DROP TRIGGER IF EXISTS update_system_usage_metrics_updated_at ON system_usage_metrics;
+DROP TRIGGER IF EXISTS update_user_activity_metrics_updated_at ON user_activity_metrics;
+DROP TRIGGER IF EXISTS update_analytics_reports_updated_at ON analytics_reports;
+
+-- Drop tables in reverse order
+DROP TABLE IF EXISTS report_schedules;
+DROP TABLE IF EXISTS report_exports;
+DROP TABLE IF EXISTS system_usage_metrics;
+DROP TABLE IF EXISTS user_activity_metrics;
+DROP TABLE IF EXISTS analytics_reports;
+
+-- Note: We don't drop the update_updated_at_column() function as it might be used by other tables
